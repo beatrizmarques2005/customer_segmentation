@@ -13,6 +13,9 @@ def load_dataset(dataset_path):
     else:
         raise ValueError("The dataset must be in CSV or EXCEL format.")
     
+    if data.columns[0] == 'Unnamed: 0':
+        data = data.drop(columns=data.columns[0])
+
     return data
 
 

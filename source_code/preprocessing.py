@@ -9,7 +9,7 @@ def initial_exploration(data):
     
     # Display the first few rows of the dataset
     print("First few rows of the dataset:")
-    print(data.head())
+    display(data.head())
     
     # Display the shape of the dataset
     print("\nShape of the dataset:")
@@ -21,7 +21,7 @@ def initial_exploration(data):
     
     # Display basic statistics of the dataset
     print("\nBasic statistics of the dataset:")
-    print(data.describe().T)
+    display(data.describe().T)
     
     # Check for missing values
     print("\nMissing values in each column:")
@@ -29,8 +29,23 @@ def initial_exploration(data):
 
 ######### CUSTOMER_BASKET #########
 
-def correct_customer_backet_format(df):
-    pass
+def correct_customer_backet_format(customer_basket):
+
+    customer_basket['number_of_items'] = customer_basket['list_of_goods'].apply(len)
+
+    # Ensure the list_of_goods column is converted from string representation to actual lists if needed
+    customer_basket['list_of_goods'] = customer_basket['list_of_goods'].apply(eval)
+
+    # Explode the list_of_goods column to create one row per item
+    customer_basket_exploded = customer_basket.explode('list_of_goods')
+
+    # Group by the items and calculate the count of invoices and customers
+    goods_summary = customer_basket_exploded.groupby('list_of_goods').agg(
+        invoice_count=('invoice_id', 'nunique'),
+        customer_count=('customer_id', 'nunique')
+    ).reset_index()
+
+    return customer_basket, goods_summary
 
 
 ######### DUPLICATES #########
