@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-
+import plotly.graph_objects as go
 import pandas as pd
 
 ######### GENERAL EXPLORATION #########
@@ -63,7 +63,69 @@ def treat_duplicates(data):
 
 ######### OUTLIERS #########
 
-#why
+def check_outliers_numerical(df):
+    numerical_columns = list(df.select_dtypes(include=['number']))
+    fig = go.Figure()
+
+    buttons = []
+
+    for idx, column in enumerate(numerical_columns):
+        fig.add_trace(go.Box(
+            x=df[column],
+            name=f'<i>{column}</i>',
+            marker_color='darkgreen',
+            visible=(idx == 0)
+        ))
+
+        buttons.append(
+            {'method': 'update',
+             'label': column,
+             'args': [{'visible': [i == idx for i in range(len(numerical_columns))]},
+                      {'title': f'Box Plot for <i>{column}</i>', 'showlegend': True}]}
+        )
+
+    fig.update_layout(
+        updatemenus=[{'type': 'dropdown', 'active': 0, 'buttons': buttons, 'x': 1, 'y': 1.15}],
+        title=f'Box Plot for <i>{numerical_columns[0]}</i>',
+        showlegend=True,
+        yaxis=dict(showticklabels=False)
+    )
+
+    fig.show()
+
+
+def check_outliers_categorical(df):
+    categorical_columns = list(df.select_dtypes(include=['object']).columns)
+    
+    fig = go.Figure()
+
+    buttons = []
+
+    for idx, column in enumerate(categorical_columns):
+        value_counts = df[column].value_counts()
+
+        fig.add_trace(go.Bar(
+            x=value_counts.index,
+            y=value_counts.values,
+            name=f'<i>{column}</i>',
+            marker_color='green',
+            visible=(idx == 0)
+        ))
+
+        buttons.append(
+            {'method': 'update',
+             'label': column,
+             'args': [{'visible': [i == idx for i in range(len(categorical_columns))]},
+                      {'title': f'Bar Plot for <i>{column}</i>', 'showlegend': True}]}
+        )
+
+    fig.update_layout(
+        updatemenus=[{'type': 'dropdown', 'active': 0, 'buttons': buttons, 'x': 1, 'y': 1.15}],
+        title=f'Bar Plot for <i>{categorical_columns[0]}</i>',
+        showlegend=True
+    )
+
+    fig.show()
 
 ######### MISSING VALUES #########
 
