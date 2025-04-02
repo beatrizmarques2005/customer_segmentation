@@ -63,7 +63,7 @@ def treat_duplicates(data):
 
 ######### OUTLIERS #########
 
-#why
+
 
 ######### MISSING VALUES #########
 
