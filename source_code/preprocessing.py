@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
 ######### GENERAL EXPLORATION #########
 
@@ -27,11 +27,60 @@ def initial_exploration(data):
     print("\nMissing values in each column:")
     print(data.isnull().sum())
 
-######### CUSTOMER_BASKET #########
+######### DATA TYPES #########
 
-def correct_customer_backet_format(customer_basket):
+def customer_info_data_types(customer_info):
 
-    customer_basket['number_of_items'] = customer_basket['list_of_goods'].apply(len)
+    # customer_id                                  int64
+    # customer_name                               object
+    # customer_gender                             object
+    # customer_birthdate                          object --> datetime64[ns]
+    # customer_info['birth_date'] = pd.to_datetime(customer_info['birth_date'], errors='coerce')
+    # kids_home                                  float64
+    # teens_home                                 float64
+    # number_complaints                          float64
+    # distinct_stores_visited                    float64
+    # lifetime_spend_groceries                   float64
+    # lifetime_spend_electronics                 float64
+    # typical_hour                               float64
+    # lifetime_spend_vegetables                  float64
+    # lifetime_spend_nonalcohol_drinks           float64
+    # lifetime_spend_alcohol_drinks              float64
+    # lifetime_spend_meat                        float64
+    # lifetime_spend_fish                        float64
+    # lifetime_spend_hygiene                     float64
+    # lifetime_spend_videogames                  float64
+    # lifetime_spend_petfood                     float64
+    # lifetime_total_distinct_products           float64
+    # percentage_of_products_bought_promotion    float64
+    # year_first_transaction                     float64
+    # loyalty_card_number                        float64
+    # latitude                                   float64
+    # longitude                                  float64
+
+    pass
+
+######### GENERAL CORRECTIONS #########
+
+def general_customer_info_corrections(customer_info):
+
+    # customer_name --> customer_name + education_level
+    split_names = customer_info['customer_name'].str.split('.', n=1, expand=True)
+
+    customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
+    customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
+
+    # birth_date --> age (years)
+    customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
+    customer_info['age'] = (pd.to_datetime('today') - customer_info['customer_birthdate']).dt.days // 365.25
+    # ?????????? customer_info['birthdate_month'] = customer_info['customer_birthdate'].dt.month
+
+    return customer_info
+
+
+def general_customer_basket_corrections(customer_basket):
+
+    customer_basket['items_count'] = customer_basket['list_of_goods'].apply(len)
 
     # Ensure the list_of_goods column is converted from string representation to actual lists if needed
     customer_basket['list_of_goods'] = customer_basket['list_of_goods'].apply(eval)
@@ -40,30 +89,36 @@ def correct_customer_backet_format(customer_basket):
     customer_basket_exploded = customer_basket.explode('list_of_goods')
 
     # Group by the items and calculate the count of invoices and customers
-    goods_summary = customer_basket_exploded.groupby('list_of_goods').agg(
+    items_summary = customer_basket_exploded.groupby('list_of_goods').agg(
         invoice_count=('invoice_id', 'nunique'),
         customer_count=('customer_id', 'nunique')
     ).reset_index()
 
-    return customer_basket, goods_summary
+    return customer_basket, items_summary
 
 
 ######### DUPLICATES #########
 
 def check_duplicates(data):
     duplicate_count = data.duplicated().sum()
-    print(f"Number of duplicate rows: {duplicate_count}")
-    return duplicate_count
+    return f"Number of duplicate rows: {duplicate_count}"
 
 def treat_duplicates(data):
-    data = data.drop_duplicates()
-    print("Duplicates have been removed.")
+
+    if int(check_duplicates(data).split(' ')[-1]) == 0:
+        print("No duplicates found.")
+
+    else:
+        data = data.drop_duplicates()
+        print("Duplicates have been removed.")
+
     return data
 
 
 ######### OUTLIERS #########
 
 def check_outliers_numerical(df):
+
     numerical_columns = list(df.select_dtypes(include=['number']))
     fig = go.Figure()
 
@@ -150,11 +205,31 @@ def impute_teens_kids_home(data):
 def impute_lifetime_spend_alcohol_drinks(data):
     data['lifetime_spend_alcohol_drinks'].replace(np.nan, 0, inplace = True)
 
+# impute education_level --> https://edu.azores.gov.pt/seccoes/matriculas-escolaridade-obrigatoria/
+# '4th', '6th', '9th', 'HighSchool', 'Bsc', 'Msc', 'Phd'
+
 
 ######### ENCODING #########
 
+def customer_info_encoding(customer_info):
+
+    # Encode education_level into years of education
+    education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'HighSchool': 12, 'Bsc': 16, 'Msc': 18, 'Phd': 21}
+    customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
+
+    # Encode customer_gender into binary values (0 for Male, 1 for Female)
+    customer_info['customer_gender'] = customer_info['customer_gender'].map({'Male': 0, 'Female': 1})
+
+    return customer_info
 
 ######### INCONSISTENCIES #########
 
 
 ######### SCALING #########
+
+def customer_info_scaling(customer_info):
+
+    # ???????? which scaler
+    customer_info = MinMaxScaler().fit_tranform(customer_info)
+ 
+    return customer_info
