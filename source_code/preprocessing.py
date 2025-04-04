@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.impute import KNNImputer
 
 ######### GENERAL EXPLORATION #########
 
@@ -209,12 +210,32 @@ def impute_lifetime_spend_alcohol_drinks(data):
 # '4th', '6th', '9th', 'HighSchool', 'Bsc', 'Msc', 'Phd'
 
 
+def imput_educ(data):
+    data['education_level'] = np.where(data['age']>= 59, '4th', data['education_level'])
+    data['education_level'] = np.where((data['age']>= 44)  & (data['age'] <=58), '6th', data['education_level'])
+    data['education_level'] = np.where((data['age']>= 30)  & (data['age'] <=43), '9th', data['education_level'])
+    data['education_level'] = np.where(data['age']<= 29, 'Hs', data['education_level'])
+
+    return data
+
+def combine_impute(data):
+    data1 = impute_loyalty_card(data)
+    data2 = impute_kids_home(data1)
+    data3 = impute_teens_home(data2)
+    data4 = impute_teens_kids_home(data3)
+    data5 = impute_lifetime_spend_alcohol_drinks(data4)
+    data6 = imput_educ(data5)
+    return data6
+
+
 ######### ENCODING #########
 
 def customer_info_encoding(customer_info):
 
+    customer_info.drop('customer_name', axis = 1, inplace = True)
+
     # Encode education_level into years of education
-    education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'HighSchool': 12, 'Bsc': 16, 'Msc': 18, 'Phd': 21}
+    education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 16, 'Msc': 18, 'Phd': 21}
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
     # Encode customer_gender into binary values (0 for Male, 1 for Female)
@@ -227,9 +248,26 @@ def customer_info_encoding(customer_info):
 
 ######### SCALING #########
 
-def customer_info_scaling(customer_info):
-
+def customer_info_scaling(data):
+    
+    scaler = MinMaxScaler()
     # ???????? which scaler
-    customer_info = MinMaxScaler().fit_tranform(customer_info)
+    df_imputed = scaler.fit_transform(data)
+
+    df_imputed = pd.DataFrame(df_imputed, columns=data.columns)
  
-    return customer_info
+    return df_imputed
+
+def KNN_imputing(data, n_neighbors, weights):
+
+    imputer = KNNImputer(n_neighbors=n_neighbors, weights=weights)
+
+    df_imputed = imputer.fit_transform(data)
+
+    df_imputed = pd.DataFrame(df_imputed, columns=data.columns)
+
+    return df_imputed
+
+
+
+
