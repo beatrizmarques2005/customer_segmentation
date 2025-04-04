@@ -118,9 +118,14 @@ def treat_duplicates(data):
 
 ######### OUTLIERS #########
 
-def check_outliers_numerical(df):
+def check_outliers_numerical_boxplot(df):
 
     numerical_columns = list(df.select_dtypes(include=['number']))
+    columns_to_remove=['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
+    for value in columns_to_remove:
+        while value in numerical_columns:  # Ensures all occurrences are removed
+            numerical_columns.remove(value)
+    # Exclude categorical columns that are numerical but represent categories
     fig = go.Figure()
 
     buttons = []
@@ -149,10 +154,46 @@ def check_outliers_numerical(df):
 
     fig.show()
 
+def check_outliers_numerical_histogram(df):
+    numerical_columns = list(df.select_dtypes(include=['number']))
+    columns_to_remove = ['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
+    
+    numerical_columns = [col for col in numerical_columns if col not in columns_to_remove]
+    
+    fig = go.Figure()
+    buttons = []
+    
+    for idx, column in enumerate(numerical_columns):
+        fig.add_trace(go.Histogram(
+            x=df[column],
+            name=f'<i>{column}</i>',
+            marker_color='darkgreen',
+            visible=(idx == 0),
+            nbinsx=30  # Adjust bin size as needed
+        ))
+        
+        buttons.append(
+            {'method': 'update',
+             'label': column,
+             'args': [{'visible': [i == idx for i in range(len(numerical_columns))]},
+                      {'title': f'Histogram for <i>{column}</i>', 'showlegend': True}]}
+        )
+    
+    fig.update_layout(
+        updatemenus=[{'type': 'dropdown', 'active': 0, 'buttons': buttons, 'x': 1, 'y': 1.15}],
+        title=f'Histogram for <i>{numerical_columns[0]}</i>',
+        showlegend=True,
+        xaxis_title='Value',
+        yaxis_title='Count'
+    )
+    
+    fig.show()
 
 def check_outliers_categorical(df):
-    categorical_columns = list(df.select_dtypes(include=['object']).columns)
-    
+    categorical_columns = ['customer_gender', 'education_level']
+    numerical_with_categorical_behaviour= ['kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
+    #the others were continuous, that's why they were not included 
+    categorical_columns.extend(numerical_with_categorical_behaviour)
     fig = go.Figure()
 
     buttons = []
