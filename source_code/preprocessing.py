@@ -7,7 +7,9 @@ from sklearn.preprocessing import LabelEncoder
 import geopandas as gpd
 from shapely.geometry import Point
 
+#######################################
 ######### GENERAL EXPLORATION #########
+#######################################
 
 def initial_exploration(data: pd.DataFrame) -> None:
     """
@@ -49,7 +51,9 @@ def initial_exploration(data: pd.DataFrame) -> None:
     print(data.isnull().sum())
 
 
+#######################################
 ######### GENERAL CORRECTIONS #########
+#######################################
 
 def general_customer_info_corrections(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
@@ -128,7 +132,9 @@ def general_customer_basket_corrections(customer_basket: pd.DataFrame) -> tuple:
     return customer_basket, items_summary
 
 
-######### DUPLICATES #########
+#######################################
+############## DUPLICATES #############
+#######################################
 
 def check_duplicates(data: pd.DataFrame) -> str:
     """
@@ -162,8 +168,9 @@ def treat_duplicates(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-
-######### OUTLIERS #########
+#######################################
+############### OUTLIERS ##############
+#######################################
 
 def check_outliers_numerical_boxplot(customer_info: pd.DataFrame) -> None:
     """
@@ -327,88 +334,45 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
-def remove_outliers(data):
+def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
+    """
+    Removes outliers from the customer information DataFrame based on predefined conditions.
+
+    Parameters:
+    -----------
+    customer_info : pd.DataFrame
+        The input DataFrame containing customer information, including various columns.
+
+    Returns:
+    --------
+    pd.DataFrame
+        A filtered DataFrame containing only rows that satisfy the outlier conditions.
+    """
     outlier_conditions = (
-        (data['kids_home'] <= 8) &
-        (data['teens_home'] <= 4) &
-        (data['number_complaints'] <= 4) &
-        (data['distinct_stores_visited'] <= 8) &
-        (data['lifetime_spend_groceries'] <= 100000) &
-        (data['lifetime_spend_electronics'] <= 20000) &
-        (data['lifetime_spend_vegetables'] <= 2600) &
-        (data['lifetime_spend_nonalcohol_drinks'] <= 1400) &
-        (data['lifetime_spend_alcohol_drinks'] <= 2800) &
-        (data['lifetime_spend_meat'] <= 2600) &
-        (data['lifetime_spend_fish'] <= 2800) &
-        (data['lifetime_spend_hygiene'] <= 2400) &
-        (data['lifetime_spend_videogames'] <= 1700) &
-        (data['lifetime_spend_petfood'] <= 850) &
-        (data['lifetime_total_distinct_products'] <= 600) &
-        (data['percentage_of_products_bought_promotion'] >= -0.5) &
-        (data['percentage_of_products_bought_promotion'] <= 1.5)
+        (customer_info['kids_home'] <= 8) &
+        (customer_info['teens_home'] <= 4) &
+        (customer_info['number_complaints'] <= 4) &
+        (customer_info['distinct_stores_visited'] <= 8) &
+        (customer_info['lifetime_spend_groceries'] <= 100000) &
+        (customer_info['lifetime_spend_electronics'] <= 20000) &
+        (customer_info['lifetime_spend_vegetables'] <= 2600) &
+        (customer_info['lifetime_spend_nonalcohol_drinks'] <= 1400) &
+        (customer_info['lifetime_spend_alcohol_drinks'] <= 2800) &
+        (customer_info['lifetime_spend_meat'] <= 2600) &
+        (customer_info['lifetime_spend_fish'] <= 2800) &
+        (customer_info['lifetime_spend_hygiene'] <= 2400) &
+        (customer_info['lifetime_spend_videogames'] <= 1700) &
+        (customer_info['lifetime_spend_petfood'] <= 850) &
+        (customer_info['lifetime_total_distinct_products'] <= 600) &
+        (customer_info['percentage_of_products_bought_promotion'] >= -0.5) &
+        (customer_info['percentage_of_products_bought_promotion'] <= 1.5)
     )
-    return data[outlier_conditions]
-
-def amount_deleted_rows(original_df, final_df):
-    shape_difference = (final_df.shape[0] - original_df.shape[0], final_df.shape[1] - original_df.shape[1])
-    print(f'It was deleted: {round((original_df.shape[0] - final_df.shape[0]) / original_df.shape[0] * 100, 2)}% of the original train dataset.')
-
-def remove_inconsistencies(data):
-    data = data[data['percentage_of_products_bought_promotion'] >= 0]
-    return data
-
-def plot_geolocation_interactive(data, latitude_col='latitude', longitude_col='longitude'):
-    # Ensure latitude and longitude columns exist
-    if latitude_col not in data.columns or longitude_col not in data.columns:
-        raise ValueError(f"Columns '{latitude_col}' and '{longitude_col}' must exist in the dataframe.")
-    
-    # Create a scatter mapbox plot using Plotly
-    fig = go.Figure(go.Scattermapbox(
-        lat=data[latitude_col],
-        lon=data[longitude_col],
-        mode='markers',
-        marker=go.scattermapbox.Marker(size=9, color='red'),
-        text=data.index,  # Display index or other relevant info on hover
-        hoverinfo='text'
-    ))
-    
-    # Set the layout for the map
-    fig.update_layout(
-        mapbox=dict(
-            style="open-street-map",
-            zoom=3,  # Adjust zoom level as needed
-            center=dict(lat=data[latitude_col].mean(), lon=data[longitude_col].mean())
-        ),
-        margin={"r":0,"t":0,"l":0,"b":0},  # Remove margins for a cleaner look
-        title="Interactive Geolocation Map"
-    )
-    
-    fig.show()
-
-def remove_far_from_coast(data, latitude_col='latitude', longitude_col='longitude'):
-    # Load a world map shapefile using GeoPandas
-    world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    world = world[world['geometry'].type == 'Polygon']  # Keep only polygons (land masses)
-    # Convert the DataFrame to a GeoDataFrame
-    geometry = [Point(xy) for xy in zip(data[longitude_col], data[latitude_col])]
-    geo_data = gpd.GeoDataFrame(data, geometry=geometry)
-    # Re-project to a projected CRS for accurate buffering
-    world = world.to_crs(epsg=3395)  # Use a projected CRS like EPSG:3395 (World Mercator)
-    # Buffer the land polygons by 1 km
-    buffered_land = world.buffer(1000)  # Buffer by 1000 meters (1 km)
-    # Re-project back to the original geographic CRS
-    buffered_land = buffered_land.to_crs(epsg=4326)  # EPSG:4326 is WGS84 (geographic CRS)
-    # Check if points are within the buffered land polygons
-    geo_data['near_coast'] = geo_data['geometry'].apply(
-        lambda point: any(buffered_land.contains(point))
-    )
-    # Filter out points that are not near the coast
-    filtered_data = geo_data[geo_data['near_coast']].drop(columns=['geometry', 'near_coast'])
-    return filtered_data
+    return customer_info[outlier_conditions]
 
 
-
-######### MISSING VALUES #########
+#######################################
+############ MISSING VALUES ###########
+#######################################
 
 def impute_loyalty_card(customer_info:pd.DataFrame) -> pd.DataFrame:
     """
@@ -421,7 +385,8 @@ def impute_loyalty_card(customer_info:pd.DataFrame) -> pd.DataFrame:
     Returns:
     pd.DataFrame: The updated DataFrame with missing values in 'loyalty_card_number' replaced by 0.
     """
-    customer_info['loyalty_card_number'].replace(np.nan, 0, inplace = True)
+    customer_info['loyalty_card_number'].fillna(0, inplace=True)
+
     return customer_info
 
 def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
@@ -461,7 +426,7 @@ def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
     
     return customer_info
 
-def impute_lifetime_spend_alcohol_drinks(customer_info):
+def impute_lifetime_spend_alcohol_drinks(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Imputes missing values in the 'lifetime_spend_alcohol_drinks' column of the customer_info DataFrame.
 
@@ -476,8 +441,9 @@ def impute_lifetime_spend_alcohol_drinks(customer_info):
     """
     customer_info['lifetime_spend_alcohol_drinks'].replace(np.nan, 0, inplace = True)
 
+    return customer_info
 
-def impute_education_level(customer_info):
+def impute_education_level(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Impute the 'education_level' column based on the 'age' column.
     This function assigns an education level to individuals based on their age,
@@ -518,6 +484,7 @@ def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
     customer_info = impute_kids_teens_home(customer_info)
     customer_info = impute_lifetime_spend_alcohol_drinks(customer_info)
     customer_info = impute_education_level(customer_info)
+
     return customer_info
 
 def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFrame:
@@ -557,10 +524,13 @@ def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFr
 
     return imputed_data
 
+# Note: we can not impute either in loyalty card number or customer birthdate.
 
-######### ENCODING #########
+#######################################
+############## ENCODING ###############
+#######################################
 
-def customer_info_encoding(customer_info):
+def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Encodes and preprocesses customer information by performing the following transformations:
     1. Drops the 'customer_name' column as it is not required for analysis.
@@ -594,10 +564,79 @@ def customer_info_encoding(customer_info):
 
     return customer_info
 
-######### INCONSISTENCIES #########
+
+#######################################
+########### INCONSISTENCIES ###########
+#######################################
+
+def remove_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
+
+    customer_info = customer_info[customer_info['percentage_of_products_bought_promotion'] >= 0]
+
+    return customer_info
+
+def plot_geolocation_interactive(data, latitude_col='latitude', longitude_col='longitude'):
+
+    # Ensure latitude and longitude columns exist
+    if latitude_col not in data.columns or longitude_col not in data.columns:
+        raise ValueError(f"Columns '{latitude_col}' and '{longitude_col}' must exist in the dataframe.")
+    
+    # Create a scatter mapbox plot using Plotly
+    fig = go.Figure(go.Scattermapbox(
+        lat=data[latitude_col],
+        lon=data[longitude_col],
+        mode='markers',
+        marker=go.scattermapbox.Marker(size=9, color='red'),
+        text=data.index,  # Display index or other relevant info on hover
+        hoverinfo='text'
+    ))
+    
+    # Set the layout for the map
+    fig.update_layout(
+        mapbox=dict(
+            style="open-street-map",
+            zoom=3,  # Adjust zoom level as needed
+            center=dict(lat=data[latitude_col].mean(), lon=data[longitude_col].mean())
+        ),
+        margin={"r":0,"t":0,"l":0,"b":0},  # Remove margins for a cleaner look
+        title="Interactive Geolocation Map"
+    )
+    
+    fig.show()
+
+def remove_far_from_coast(data, latitude_col='latitude', longitude_col='longitude'):
+
+    # Load a world map shapefile using GeoPandas
+    world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+    world = world[world['geometry'].type == 'Polygon']  # Keep only polygons (land masses)
+
+    # Convert the DataFrame to a GeoDataFrame
+    geometry = [Point(xy) for xy in zip(data[longitude_col], data[latitude_col])]
+    geo_data = gpd.GeoDataFrame(data, geometry=geometry)
+
+    # Re-project to a projected CRS for accurate buffering
+    world = world.to_crs(epsg=3395)  # Use a projected CRS like EPSG:3395 (World Mercator)
+
+    # Buffer the land polygons by 1 km
+    buffered_land = world.buffer(1000)  # Buffer by 1000 meters (1 km)
+
+    # Re-project back to the original geographic CRS
+    buffered_land = buffered_land.to_crs(epsg=4326)  # EPSG:4326 is WGS84 (geographic CRS)
+
+    # Check if points are within the buffered land polygons
+    geo_data['near_coast'] = geo_data['geometry'].apply(
+        lambda point: any(buffered_land.contains(point))
+    )
+
+    # Filter out points that are not near the coast
+    filtered_data = geo_data[geo_data['near_coast']].drop(columns=['geometry', 'near_coast'])
+
+    return filtered_data
 
 
-######### SCALING #########
+#######################################
+############### SCALING ###############
+#######################################
 
 def scaling(data: pd.DataFrame) -> pd.DataFrame:
     """
