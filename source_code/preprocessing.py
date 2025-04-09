@@ -3,7 +3,8 @@ import numpy as np
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import KNNImputer
-from sklearn.preprocessing import LabelEncoder
+import geopandas as gpd
+from shapely.geometry import Point
 
 ######### GENERAL EXPLORATION #########
 
@@ -76,7 +77,6 @@ def general_customer_info_corrections(customer_info):
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
     customer_info['age'] = (pd.to_datetime('today') - customer_info['customer_birthdate']).dt.days // 365.25
     # ?????????? customer_info['birthdate_month'] = customer_info['customer_birthdate'].dt.month
-    customer_info.drop('customer_birthdate', axis = 1, inplace = True)
 
     return customer_info
 
@@ -226,6 +226,85 @@ def check_outliers_categorical(df):
 
     fig.show()
 
+def remove_outliers(data):
+    outlier_conditions = (
+        (data['kids_home'] <= 8) &
+        (data['teens_home'] <= 4) &
+        (data['number_complaints'] <= 4) &
+        (data['distinct_stores_visited'] <= 8) &
+        (data['lifetime_spend_groceries'] <= 100000) &
+        (data['lifetime_spend_electronics'] <= 20000) &
+        (data['lifetime_spend_vegetables'] <= 2600) &
+        (data['lifetime_spend_nonalcohol_drinks'] <= 1400) &
+        (data['lifetime_spend_alcohol_drinks'] <= 2800) &
+        (data['lifetime_spend_meat'] <= 2600) &
+        (data['lifetime_spend_fish'] <= 2800) &
+        (data['lifetime_spend_hygiene'] <= 2400) &
+        (data['lifetime_spend_videogames'] <= 1700) &
+        (data['lifetime_spend_petfood'] <= 850) &
+        (data['lifetime_total_distinct_products'] <= 600) &
+        (data['percentage_of_products_bought_promotion'] >= -0.5) &
+        (data['percentage_of_products_bought_promotion'] <= 1.5)
+    )
+    return data[outlier_conditions]
+
+def amount_deleted_rows(original_df, final_df):
+    shape_difference = (final_df.shape[0] - original_df.shape[0], final_df.shape[1] - original_df.shape[1])
+    print(f'It was deleted: {round((original_df.shape[0] - final_df.shape[0]) / original_df.shape[0] * 100, 2)}% of the original train dataset.')
+
+def remove_inconsistencies(data):
+    data = data[data['percentage_of_products_bought_promotion'] >= 0]
+    return data
+
+def plot_geolocation_interactive(data, latitude_col='latitude', longitude_col='longitude'):
+    # Ensure latitude and longitude columns exist
+    if latitude_col not in data.columns or longitude_col not in data.columns:
+        raise ValueError(f"Columns '{latitude_col}' and '{longitude_col}' must exist in the dataframe.")
+    
+    # Create a scatter mapbox plot using Plotly
+    fig = go.Figure(go.Scattermapbox(
+        lat=data[latitude_col],
+        lon=data[longitude_col],
+        mode='markers',
+        marker=go.scattermapbox.Marker(size=9, color='red'),
+        text=data.index,  # Display index or other relevant info on hover
+        hoverinfo='text'
+    ))
+    
+    # Set the layout for the map
+    fig.update_layout(
+        mapbox=dict(
+            style="open-street-map",
+            zoom=3,  # Adjust zoom level as needed
+            center=dict(lat=data[latitude_col].mean(), lon=data[longitude_col].mean())
+        ),
+        margin={"r":0,"t":0,"l":0,"b":0},  # Remove margins for a cleaner look
+        title="Interactive Geolocation Map"
+    )
+    
+    fig.show()
+
+def remove_far_from_coast(data, latitude_col='latitude', longitude_col='longitude'):
+    # Load a world map shapefile using GeoPandas
+    world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+    world = world[world['geometry'].type == 'Polygon']  # Keep only polygons (land masses)
+    # Convert the DataFrame to a GeoDataFrame
+    geometry = [Point(xy) for xy in zip(data[longitude_col], data[latitude_col])]
+    geo_data = gpd.GeoDataFrame(data, geometry=geometry)
+    # Re-project to a projected CRS for accurate buffering
+    world = world.to_crs(epsg=3395)  # Use a projected CRS like EPSG:3395 (World Mercator)
+    # Buffer the land polygons by 1 km
+    buffered_land = world.buffer(1000)  # Buffer by 1000 meters (1 km)
+    # Re-project back to the original geographic CRS
+    buffered_land = buffered_land.to_crs(epsg=4326)  # EPSG:4326 is WGS84 (geographic CRS)
+    # Check if points are within the buffered land polygons
+    geo_data['near_coast'] = geo_data['geometry'].apply(
+        lambda point: any(buffered_land.contains(point))
+    )
+    # Filter out points that are not near the coast
+    filtered_data = geo_data[geo_data['near_coast']].drop(columns=['geometry', 'near_coast'])
+    return filtered_data
+
 ######### MISSING VALUES #########
 
 def impute_loyalty_card(data):
@@ -254,7 +333,7 @@ def impute_lifetime_spend_alcohol_drinks(data):
 
 
 def imput_educ(data):
-    data['education_level'] = np.where((data['age']>= 59) & (~data['age'].isna()), '4th', data['education_level'])
+    data['education_level'] = np.where(data['age']>= 59, '4th', data['education_level'])
     data['education_level'] = np.where((data['age']>= 44)  & (data['age'] <=58), '6th', data['education_level'])
     data['education_level'] = np.where((data['age']>= 30)  & (data['age'] <=43), '9th', data['education_level'])
     data['education_level'] = np.where(data['age']<= 29, 'Hs', data['education_level'])
@@ -267,9 +346,8 @@ def combine_impute(data):
     data3 = impute_teens_home(data2)
     data4 = impute_teens_kids_home(data3)
     data5 = impute_lifetime_spend_alcohol_drinks(data4)
-    #print(data5)
-    #data6 = imput_educ(data5)
-    return data5
+    data6 = imput_educ(data5)
+    return data6
 
 
 ######### ENCODING #########
@@ -283,10 +361,8 @@ def customer_info_encoding(customer_info):
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
     # Encode customer_gender into binary values (0 for Male, 1 for Female)
-    gender_map = {'male': 0, 'female': 1}
-    customer_info['gender'] = customer_info['customer_gender'].map(gender_map)
+    customer_info['customer_gender'] = customer_info['customer_gender'].map({'Male': 0, 'Female': 1})
 
-    customer_info.drop(['customer_gender', 'education_level'], axis = 1, inplace = True)
     return customer_info
 
 ######### INCONSISTENCIES #########
@@ -295,32 +371,24 @@ def customer_info_encoding(customer_info):
 ######### SCALING #########
 
 def customer_info_scaling(data):
-
-    new_data = data.drop('customer_id', axis = 1)
     
     scaler = MinMaxScaler()
     # ???????? which scaler
-    df_imputed = scaler.fit_transform(new_data)
+    df_imputed = scaler.fit_transform(data)
 
-    df_imputed = pd.DataFrame(df_imputed, columns=new_data.columns)
-
-    df_imputed['customer_id'] = data['customer_id']
+    df_imputed = pd.DataFrame(df_imputed, columns=data.columns)
  
     return df_imputed
 
-def KNN_imputing(data, n_neighbors = 5):
-    #we don't want to impute for customer_id
-    new_data = data.drop('customer_id', axis =1)
+def KNN_imputing(data, n_neighbors, weights):
 
-    imputer = KNNImputer(n_neighbors=n_neighbors)
+    imputer = KNNImputer(n_neighbors=n_neighbors, weights=weights)
 
-    imp_data = imputer.fit_transform(new_data)
+    df_imputed = imputer.fit_transform(data)
 
-    imputed = pd.DataFrame(imp_data, columns=new_data.columns)
+    df_imputed = pd.DataFrame(df_imputed, columns=data.columns)
 
-    imputed['customer_id'] = data['customer_id']
-
-    return imputed
+    return df_imputed
 
 
 
