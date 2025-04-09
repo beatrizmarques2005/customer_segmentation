@@ -3,6 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import KNNImputer
+from sklearn.preprocessing import LabelEncoder
 
 ######### GENERAL EXPLORATION #########
 
@@ -75,6 +76,7 @@ def general_customer_info_corrections(customer_info):
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
     customer_info['age'] = (pd.to_datetime('today') - customer_info['customer_birthdate']).dt.days // 365.25
     # ?????????? customer_info['birthdate_month'] = customer_info['customer_birthdate'].dt.month
+    customer_info.drop('customer_birthdate', axis = 1, inplace = True)
 
     return customer_info
 
@@ -252,7 +254,7 @@ def impute_lifetime_spend_alcohol_drinks(data):
 
 
 def imput_educ(data):
-    data['education_level'] = np.where(data['age']>= 59, '4th', data['education_level'])
+    data['education_level'] = np.where((data['age']>= 59) & (~data['age'].isna()), '4th', data['education_level'])
     data['education_level'] = np.where((data['age']>= 44)  & (data['age'] <=58), '6th', data['education_level'])
     data['education_level'] = np.where((data['age']>= 30)  & (data['age'] <=43), '9th', data['education_level'])
     data['education_level'] = np.where(data['age']<= 29, 'Hs', data['education_level'])
@@ -265,8 +267,9 @@ def combine_impute(data):
     data3 = impute_teens_home(data2)
     data4 = impute_teens_kids_home(data3)
     data5 = impute_lifetime_spend_alcohol_drinks(data4)
-    data6 = imput_educ(data5)
-    return data6
+    #print(data5)
+    #data6 = imput_educ(data5)
+    return data5
 
 
 ######### ENCODING #########
@@ -280,8 +283,10 @@ def customer_info_encoding(customer_info):
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
     # Encode customer_gender into binary values (0 for Male, 1 for Female)
-    customer_info['customer_gender'] = customer_info['customer_gender'].map({'Male': 0, 'Female': 1})
+    gender_map = {'male': 0, 'female': 1}
+    customer_info['gender'] = customer_info['customer_gender'].map(gender_map)
 
+    customer_info.drop(['customer_gender', 'education_level'], axis = 1, inplace = True)
     return customer_info
 
 ######### INCONSISTENCIES #########
@@ -299,15 +304,19 @@ def customer_info_scaling(data):
  
     return df_imputed
 
-def KNN_imputing(data, n_neighbors, weights):
+def KNN_imputing(data, n_neighbors = 5):
+    #we don't want to impute for customer_id
+    new_data = data.drop('customer_id', axis =1)
 
-    imputer = KNNImputer(n_neighbors=n_neighbors, weights=weights)
+    imputer = KNNImputer(n_neighbors=n_neighbors)
 
-    df_imputed = imputer.fit_transform(data)
+    imp_data = imputer.fit_transform(new_data)
 
-    df_imputed = pd.DataFrame(df_imputed, columns=data.columns)
+    imputed = pd.DataFrame(imp_data, columns=new_data.columns)
 
-    return df_imputed
+    imputed['customer_id'] = data['customer_id']
+
+    return imputed
 
 
 
