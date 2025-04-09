@@ -295,12 +295,16 @@ def customer_info_encoding(customer_info):
 ######### SCALING #########
 
 def customer_info_scaling(data):
+
+    new_data = data.drop('customer_id', axis = 1)
     
     scaler = MinMaxScaler()
     # ???????? which scaler
-    df_imputed = scaler.fit_transform(data)
+    df_imputed = scaler.fit_transform(new_data)
 
-    df_imputed = pd.DataFrame(df_imputed, columns=data.columns)
+    df_imputed = pd.DataFrame(df_imputed, columns=new_data.columns)
+
+    df_imputed['customer_id'] = data['customer_id']
  
     return df_imputed
 
