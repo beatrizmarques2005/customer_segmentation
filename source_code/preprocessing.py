@@ -6,6 +6,9 @@ from sklearn.impute import KNNImputer
 from sklearn.preprocessing import LabelEncoder
 import geopandas as gpd
 from shapely.geometry import Point
+from sklearn.cluster import MeanShift
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
 
 #######################################
 ######### GENERAL EXPLORATION #########
@@ -55,7 +58,8 @@ def initial_exploration(data: pd.DataFrame) -> None:
 ######### GENERAL CORRECTIONS #########
 #######################################
 
-def general_customer_info_corrections(customer_info: pd.DataFrame) -> pd.DataFrame:
+def general_customer_info_corrections(customer_info: pd.DataFrame, customer_basket: pd.DataFrame) -> pd.DataFrame:
+    
     """
     Perform general corrections and transformations on customer information data.
     This function processes a DataFrame containing customer information by:
@@ -64,12 +68,18 @@ def general_customer_info_corrections(customer_info: pd.DataFrame) -> pd.DataFra
        - The `customer_name` is updated to exclude the prefix and is stripped of leading/trailing whitespace.
     2. Converting the `customer_birthdate` column to a datetime format and calculating the customer's age in years.
        - The `age` is computed based on the difference between a fixed reference date (2023-06-09) and the birthdate.
+    3. Calculating the number of unique invoices for each customer.
+        - Customers without any invoices in the `customer_basket` DataFrame will have `invoice_count` set to NaN.
+
     Parameters:
     -----------
     customer_info : pandas.DataFrame
         A DataFrame containing customer information with at least the following columns:
         - 'customer_name': str, the name of the customer (may include education level as a prefix).
         - 'customer_birthdate': str or datetime, the birthdate of the customer.
+    customer_basket : pandas.DataFrame
+        A DataFrame containing customer transaction data.
+
     Returns:
     --------
     pandas.DataFrame
@@ -93,6 +103,10 @@ def general_customer_info_corrections(customer_info: pd.DataFrame) -> pd.DataFra
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
     customer_info['age'] = (pd.Timestamp('2023-06-09 23:59:59') - customer_info['customer_birthdate']).dt.days // 365.25
+
+    # 3
+    invoice_counts = customer_basket.groupby('customer_id')['invoice_id'].nunique()
+    customer_info = customer_info.merge(invoice_counts.rename('invoice_count'), on='customer_id', how='left')
 
     return customer_info
 
@@ -138,31 +152,33 @@ def general_customer_basket_corrections(customer_basket: pd.DataFrame) -> tuple:
 
 def check_duplicates(data: pd.DataFrame) -> str:
     """
-    Checks for duplicate rows in a given dataset.
+    Checks for duplicate customer IDs in a given dataset.
 
     Args:
-        data (pandas.DataFrame): The dataset to check for duplicates.
+        data (pandas.DataFrame): The dataset to check for duplicate customer IDs.
 
     Returns:
-        str: A message indicating the number of duplicate rows in the dataset.
+        str: A message indicating the number of duplicate customer IDs in the dataset.
     """
-    duplicate_count = data.duplicated().sum()
-    return f"Number of duplicate rows: {duplicate_count}"
+    duplicate_count = data['customer_id'].duplicated().sum()
+    return f"Number of duplicate customer IDs: {duplicate_count}"
 
 def treat_duplicates(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Removes duplicate rows from a pandas DataFrame if any are found.
+    Removes rows with duplicate customer IDs, keeping the first occurrence.
+
     Args:
-        data (pd.DataFrame): The input DataFrame to check and treat for duplicates.
+        data (pandas.DataFrame): The dataset to process.
+
     Returns:
-        pd.DataFrame: The DataFrame with duplicates removed, if any were present.
+        pandas.DataFrame: The dataset with duplicate customer IDs removed.
     """
 
     if int(check_duplicates(data).split(' ')[-1]) == 0:
         print("No duplicates found.")
 
     else:
-        data = data.drop_duplicates()
+        data = data.drop_duplicates(subset='customer_id', keep='first')
         print("Duplicates have been removed.")
 
     return data
@@ -334,6 +350,57 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
+def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame) -> None:
+    """
+    Identifies multidimensional outliers using the Mean Shift clustering algorithm and visualizes the results.
+
+    Parameters:
+    -----------
+    customer_info : pd.DataFrame
+        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
+
+    Returns:
+    --------
+    None
+        The function displays a scatter plot with clusters and highlights potential outliers.
+    """
+
+    # Select numerical columns for clustering
+    numerical_columns = customer_info.select_dtypes(include=['number']).columns
+    data = customer_info[numerical_columns]
+
+    # Standardize the data
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(data)
+
+    # Apply Mean Shift clustering
+    mean_shift = MeanShift()
+    mean_shift.fit(scaled_data)
+
+    # Add cluster labels to the DataFrame
+    customer_info['cluster'] = mean_shift.labels_
+
+    # Identify outliers as points in small clusters
+    cluster_sizes = customer_info['cluster'].value_counts()
+    small_clusters = cluster_sizes[cluster_sizes < 5].index  # Threshold for small clusters
+    customer_info['is_outlier'] = customer_info['cluster'].isin(small_clusters)
+
+    # Visualize clusters and outliers
+    plt.figure(figsize=(10, 6))
+    for cluster in customer_info['cluster'].unique():
+        cluster_data = scaled_data[customer_info['cluster'] == cluster]
+        plt.scatter(cluster_data[:, 0], cluster_data[:, 1], label=f'Cluster {cluster}', alpha=0.6)
+
+    # Highlight outliers
+    outliers = scaled_data[customer_info['is_outlier']]
+    plt.scatter(outliers[:, 0], outliers[:, 1], color='red', label='Outliers', edgecolor='k')
+
+    plt.title('Mean Shift Clustering with Outliers')
+    plt.xlabel('Feature 1')
+    plt.ylabel('Feature 2')
+    plt.legend()
+    plt.show()
+
 def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Removes outliers from the customer information DataFrame based on predefined conditions.
@@ -373,7 +440,7 @@ def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
 #######################################
 ############ MISSING VALUES ###########
 #######################################
-
+    
 def impute_loyalty_card(customer_info:pd.DataFrame) -> pd.DataFrame:
     """
     Imputes missing values in the 'loyalty_card_number' column of the customer_info DataFrame with 0.
