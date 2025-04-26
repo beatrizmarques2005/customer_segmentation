@@ -71,6 +71,5 @@ def amount_deleted_rows(original_df: pd.DataFrame, final_df: pd.DataFrame) -> No
     Returns:
         None: This function only prints the percentage of rows deleted.
     """
-    shape_difference = (final_df.shape[0] - original_df.shape[0], final_df.shape[1] - original_df.shape[1])
 
     print(f'It was deleted: {round((original_df.shape[0] - final_df.shape[0]) / original_df.shape[0] * 100, 2)}% of the original train dataset.')
