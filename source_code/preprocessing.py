@@ -6,7 +6,7 @@ from sklearn.impute import KNNImputer
 from sklearn.preprocessing import LabelEncoder
 import geopandas as gpd
 from shapely.geometry import Point
-from sklearn.cluster import MeanShift, DBSCAN
+from sklearn.cluster import MeanShift, DBSCAN, IsolationForest
 from minisom import MiniSom
 import matplotlib.pyplot as plt
 
@@ -401,7 +401,7 @@ def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame) -> None:
     plt.show()
 
 # Mean Shift
-def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame) -> None:
+def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
     """
     Identifies multidimensional outliers using the Mean Shift clustering algorithm and visualizes the results.
 
@@ -409,6 +409,10 @@ def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame) -> N
     -----------
     customer_info : pd.DataFrame
         A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
+    
+    nr_obs_small_clusters : int
+        The threshold for the minimum number of observations in a cluster to be considered valid.
+        Below this threshold, the cluster is considered small, therefore the point is an outlier.
 
     Returns:
     --------
@@ -416,16 +420,13 @@ def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame) -> N
         The function displays a scatter plot with clusters and highlights potential outliers.
     """
 
-    # Apply Mean Shift clustering
     mean_shift = MeanShift()
     mean_shift.fit(customer_info)
 
-    # Add cluster labels to the DataFrame
     customer_info['cluster'] = mean_shift.labels_
 
-    # Identify outliers as points in small clusters
     cluster_sizes = customer_info['cluster'].value_counts()
-    small_clusters = cluster_sizes[cluster_sizes < 5].index  # Threshold for small clusters
+    small_clusters = cluster_sizes[cluster_sizes < nr_obs_small_clusters].index  # Threshold
     customer_info['is_outlier'] = customer_info['cluster'].isin(small_clusters)
 
     # Visualize clusters and outliers
@@ -439,6 +440,43 @@ def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame) -> N
     plt.scatter(outliers[:, 0], outliers[:, 1], color='red', label='Outliers', edgecolor='k')
 
     plt.title('Mean Shift Clustering with Outliers')
+    plt.xlabel('Feature 1')
+    plt.ylabel('Feature 2')
+    plt.legend()
+    plt.show()
+
+# Isolation Forest
+def check_multidimensional_outliers_isolation_forest(customer_info: pd.DataFrame, , nr_obs_small_clusters: int) -> None:
+    """
+    Identifies multidimensional outliers using the Isolation Forest algorithm and visualizes the results.
+
+    Parameters:
+    -----------
+    customer_info : pd.DataFrame
+        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
+    
+    nr_obs_small_clusters : int
+        The threshold for the minimum number of observations in a cluster to be considered valid.
+        Below this threshold, the cluster is considered small, therefore the point is an outlier.
+
+    Returns:
+    --------
+    None
+        The function displays a scatter plot with clusters and highlights potential outliers.
+    """
+
+    isolation_forest = IsolationForest(contamination=0.1)
+    customer_info['is_outlier'] = isolation_forest.fit_predict(customer_info) == -1
+
+    # Visualize clusters and outliers
+    plt.figure(figsize=(10, 6))
+    plt.scatter(customer_info.iloc[:, 0], customer_info.iloc[:, 1], c=customer_info['is_outlier'], cmap='coolwarm', alpha=0.6)
+    
+    # Highlight outliers
+    outliers = customer_info[customer_info['is_outlier']]
+    plt.scatter(outliers.iloc[:, 0], outliers.iloc[:, 1], color='red', label='Outliers', edgecolor='k')
+
+    plt.title('Isolation Forest Clustering with Outliers')
     plt.xlabel('Feature 1')
     plt.ylabel('Feature 2')
     plt.legend()
@@ -578,7 +616,6 @@ def plot_most_important_variable(trained_som, features):
     plt.xlim([0, 15])
     plt.ylim([0, 15])
     plt.show()
-
 
 def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
