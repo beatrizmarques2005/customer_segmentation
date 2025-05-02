@@ -365,7 +365,7 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
     fig.show()
 
 # DBSCAN
-def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
+def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, nr_obs_small_clusters: int, eps_parameter: float) -> None:
     """
     Identifies multidimensional outliers using the DBSCAN clustering algorithm and visualizes the results.
 
@@ -380,26 +380,10 @@ def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, nr_obs_s
         The function displays a scatter plot with clusters and highlights potential outliers.
     """
 
-    # Apply DBSCAN clustering
-    dbscan = DBSCAN(eps=0.5, min_samples=nr_obs_small_clusters)
+    dbscan = DBSCAN(eps=eps_parameter, min_samples=nr_obs_small_clusters)
     customer_info['cluster_dbscan'] = dbscan.fit_predict(customer_info)
 
-    # Identify outliers as points not in any cluster (-1 label)
     customer_info['is_outlier_dbscan'] = customer_info['cluster_dbscan'] == -1
-
-    # Visualize clusters and outliers
-    plt.figure(figsize=(10, 6))
-    plt.scatter(customer_info.iloc[:, 0], customer_info.iloc[:, 1], c=customer_info['cluster_dbscan'], cmap='viridis', alpha=0.6)
-    
-    # Highlight outliers
-    outliers = customer_info[customer_info['is_outlier_dbscan']]
-    plt.scatter(outliers.iloc[:, 0], outliers.iloc[:, 1], color='red', label='Outliers', edgecolor='k')
-
-    plt.title('DBSCAN Clustering with Outliers')
-    plt.xlabel('Feature 1')
-    plt.ylabel('Feature 2')
-    plt.legend()
-    plt.show()
 
     return customer_info
 
@@ -432,22 +416,6 @@ def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame, nr_o
     small_clusters = cluster_sizes[cluster_sizes < nr_obs_small_clusters].index  # Threshold
     customer_info['is_outlier_mean_shift'] = customer_info['cluster_mean_shift'].isin(small_clusters)
 
-    # Visualize clusters and outliers
-    plt.figure(figsize=(10, 6))
-    for cluster in customer_info['cluster_mean_shift'].unique():
-        cluster_data = customer_info[customer_info['cluster_mean_shift'] == cluster]
-        plt.scatter(cluster_data[:, 0], cluster_data[:, 1], label=f'Cluster {cluster}', alpha=0.6)
-
-    # Highlight outliers
-    outliers = customer_info[customer_info['is_outlier']]
-    plt.scatter(outliers[:, 0], outliers[:, 1], color='red', label='Outliers', edgecolor='k')
-
-    plt.title('Mean Shift Clustering with Outliers')
-    plt.xlabel('Feature 1')
-    plt.ylabel('Feature 2')
-    plt.legend()
-    plt.show()
-
     return customer_info
 
 # Isolation Forest
@@ -472,18 +440,6 @@ def check_multidimensional_outliers_isolation_forest(customer_info: pd.DataFrame
 
     isolation_forest = IsolationForest(contamination=0.1)
     customer_info['is_outlier_isolation_forest'] = isolation_forest.fit_predict(customer_info) == -1
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(customer_info.iloc[:, 0], customer_info.iloc[:, 1], c=customer_info['is_outlier_isolation_forest'], cmap='coolwarm', alpha=0.6)
-
-    outliers = customer_info[customer_info['is_outlier_isolation_forest']]
-    plt.scatter(outliers.iloc[:, 0], outliers.iloc[:, 1], color='red', label='Outliers', edgecolor='k')
-
-    plt.title('Isolation Forest Clustering with Outliers')
-    plt.xlabel('Feature 1')
-    plt.ylabel('Feature 2')
-    plt.legend()
-    plt.show()
 
     return customer_info
 
