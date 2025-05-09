@@ -443,14 +443,16 @@ def check_multidimensional_outliers_isolation_forest(customer_info: pd.DataFrame
 
     return customer_info
 
+
 # SOM
-def check_multidimensional_outliers_som(data: pd.DataFrame, 
+def check_multidimensional_outliers_som(data_np: np.ndarray, 
                                         x: int, 
                                         y: int, 
                                         input_len: int, 
-                                        sigma: float = 1.0,
-                                        learning_rate: float = 0.5, 
-                                        random_seed: int = None,
+                                        sigma: float = 0.5,
+                                        learning_rate: float = 1,
+                                        neighborhood_function: str ='gaussian', 
+                                        random_seed: int = 42,
                                         number_of_iterations: int = 1000) -> MiniSom:
     """
     Train a Self-Organizing Map (SOM) using the given data.
@@ -469,8 +471,9 @@ def check_multidimensional_outliers_som(data: pd.DataFrame,
         MiniSom: The trained SOM model.
     """
     som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
-    som.random_weights_init(data)
-    som.train_random(data, num_iteration=number_of_iterations)
+    #som.random_weights_init(data)
+    #som.train_random(data, num_iteration=number_of_iterations)
+    som.train_batch(data_np, number_of_iterations)
 
 def som_mean_clusters(data, col):
     """
@@ -539,13 +542,13 @@ def plot_feature_influence(trained_som, data):
     feature_names = data.columns
     W = trained_som.get_weights()
 
-    plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(15, 15))
     for i, f in enumerate(feature_names):
         plt.subplot(5, 5, i + 1)
         plt.title(f)
         plt.pcolor(W[:, :, i].T, cmap='coolwarm')
-        plt.xticks(np.arange(15 + 1))
-        plt.yticks(np.arange(15 + 1))
+        plt.xticks(np.arange(10 + 1))
+        plt.yticks(np.arange(10 + 1))
     plt.tight_layout()
     plt.show()
 
