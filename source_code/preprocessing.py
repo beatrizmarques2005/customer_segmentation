@@ -914,6 +914,40 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
 
     return pd.Series(inconsistencies), inconsistent_rows
 
+def remove_inconsistencies_pers(customer_info: pd.DataFrame) -> pd.DataFrame:
+    for index, row in customer_info.iterrows():
+        if row['kids_home'] < 0:
+            row['kids_home'] *= -1
+        if row['teens_home'] < 0:
+            row['teens_home'] *= -1
+        if row['number_complaints'] < 0:
+            row['number_complaints'] = 0
+        if row['distinct_stores_visited'] < 0:
+            row['distinct_stores_visited'] = 0
+        if row['year_first_transaction'] > 2025:
+            row['year_first_transaction'] = 2025
+        if row['lifetime_total_distinct_products'] <= 0:
+            row['lifetime_total_distinct_products'] = 0
+        if row['distinct_products_sum'] > row['lifetime_total_distinct_products']:
+            row['distinct_products_sum'] = row['lifetime_total_distinct_products']
+        if row['percentage_of_products_bought_promotion'] < 0:
+            row['percentage_of_products_bought_promotion'] = 0
+        if row['percentage_of_products_bought_promotion'] > 1:
+            row['percentage_of_products_bought_promotion'] = 1
+        #if row['typical_hour'] < 0 or row['typical_hour'] > 23:
+        #    row['typical_hour'] = 0
+        for col in customer_info.columns:
+            if col.startswith('lifetime_spend_'):
+                if row[col] < 0:
+                    row[col] = 0
+        spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
+        total_spend = sum(row[col] for col in spend_cols)
+        if total_spend == 0:
+            row['number_complaints'] = 0
+            row['distinct_stores_visited'] = 0
+            row['lifetime_total_distinct_products'] = 0
+    return customer_info
+
 def remove_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Removes inconsistent rows from the customer_info DataFrame based on the inconsistencies identified
