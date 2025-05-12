@@ -1,5 +1,6 @@
 
 import pandas as pd
+import os
 
 
 def load_dataset(dataset_path: str) -> pd.DataFrame:
@@ -73,3 +74,34 @@ def amount_deleted_rows(original_df: pd.DataFrame, final_df: pd.DataFrame) -> No
     """
 
     print(f'It was deleted: {round((original_df.shape[0] - final_df.shape[0]) / original_df.shape[0] * 100, 2)}% of the original train dataset.')
+
+
+def export_dataset(data: pd.DataFrame, path: str, name: str, format: str = 'csv') -> None:
+    """
+    Exports a pandas DataFrame to a specified file format and path.
+
+    Args:
+        data (pd.DataFrame): The DataFrame to be exported.
+        path (str): The directory path where the file will be saved.
+        name (str): The name of the file (without extension).
+        format (str, optional): The file format ('csv' or 'xlsx'). Defaults to 'csv'.
+
+    Raises:
+        ValueError: If the specified format is not 'csv' or 'xlsx'.
+
+    Returns:
+        None
+    """
+    if format not in ['csv', 'xlsx']:
+        raise ValueError("The format must be 'csv' or 'xlsx'.")
+
+    full_path = f"{path}/{name}.{format}"
+
+    # Check if the file exists and remove it if it does
+    if os.path.exists(full_path):
+        os.remove(full_path)
+
+    if format == 'csv':
+        data.to_csv(full_path, index=False)
+    elif format == 'xlsx':
+        data.to_excel(full_path, index=False)

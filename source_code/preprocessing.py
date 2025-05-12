@@ -10,6 +10,7 @@ from sklearn.cluster import MeanShift, DBSCAN, KMeans
 from sklearn.ensemble import IsolationForest
 from minisom import MiniSom
 import seaborn as sns
+from scipy.cluster.hierarchy import linkage, fcluster
 import matplotlib.pyplot as plt
 
 #######################################
@@ -126,8 +127,8 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     )
 
     # 4
-    if 'gender' in customer_info.columns:
-        customer_info.drop(columns=['gender'], inplace=True)
+    if 'customer_gender' in customer_info.columns:
+        customer_info.drop(columns=['customer_gender'], inplace=True)
 
     return customer_info
 
@@ -326,7 +327,6 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
                                       should include the specified categorical columns and numerical
                                       columns with categorical behavior.
     Categorical Columns:
-        - 'customer_gender'
         - 'education_level'
     Numerical Columns with Categorical Behavior:
         - 'kids_home'
@@ -339,7 +339,7 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
         None: The function displays the interactive Plotly figure and does not return any value.
 
     """
-    categorical_columns = ['customer_gender', 'education_level']
+    categorical_columns = ['education_level']
     numerical_with_categorical_behaviour= ['kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
     categorical_columns.extend(numerical_with_categorical_behaviour)
 
@@ -373,296 +373,38 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
-## Multi Dimensional Outliers
+## Multi Dimensional Outliers --> DBSCAN
 
-# DBSCAN
-def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, nr_obs_small_clusters: int, eps_parameter: float) -> None:
-    """
-    Identifies multidimensional outliers using the DBSCAN clustering algorithm and visualizes the results.
+def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> None:
 
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
 
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
-
-    dbscan = DBSCAN(eps=eps_parameter, min_samples=nr_obs_small_clusters)
     customer_info['cluster_dbscan'] = dbscan.fit_predict(customer_info)
 
     customer_info['is_outlier_dbscan'] = customer_info['cluster_dbscan'] == -1
 
     return customer_info
 
-# Mean Shift
-def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
-    """
-    Identifies multidimensional outliers using the Mean Shift clustering algorithm and visualizes the results.
+def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: int, eps_range: tuple) -> None:
 
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
-    
-    nr_obs_small_clusters : int
-        The threshold for the minimum number of observations in a cluster to be considered valid.
-        Below this threshold, the cluster is considered small, therefore the point is an outlier.
+    for eps in np.arange(*eps_range):
+        
+        print('=====================================')
+        ci_dbscan = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
+        cluster_comparison = ci_dbscan.groupby(['cluster_dbscan', 'is_outlier_dbscan']).size().reset_index(name='number_of_customers')
 
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
+        num_clusters = cluster_comparison[cluster_comparison['is_outlier_dbscan'] == 0]['cluster_dbscan'].nunique()
+        total_outliers = cluster_comparison[cluster_comparison["is_outlier_dbscan"] == 1]["number_of_customers"].sum()
 
-    mean_shift = MeanShift()
-    mean_shift.fit(customer_info)
+        print(f"With eps = {eps}\n\tNumber of clusters (not outliers): {num_clusters}\n\tTotal number of outliers: {total_outliers}")
 
-    customer_info['cluster_mean_shift'] = mean_shift.labels_
+def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> pd.DataFrame:
 
-    cluster_sizes = customer_info['cluster_mean_shift'].value_counts()
-    small_clusters = cluster_sizes[cluster_sizes < nr_obs_small_clusters].index  # Threshold
-    customer_info['is_outlier_mean_shift'] = customer_info['cluster_mean_shift'].isin(small_clusters)
+    customer_info = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
+    customer_info = customer_info[customer_info['is_outlier_dbscan'] == False]
+    customer_info.drop(columns=['cluster_dbscan', 'is_outlier_dbscan'], inplace=True)
 
     return customer_info
-
-# Isolation Forest
-def check_multidimensional_outliers_isolation_forest(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
-    """
-    Identifies multidimensional outliers using the Isolation Forest algorithm and visualizes the results.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
-    
-    nr_obs_small_clusters : int
-        The threshold for the minimum number of observations in a cluster to be considered valid.
-        Below this threshold, the cluster is considered small, therefore the point is an outlier.
-
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
-
-    isolation_forest = IsolationForest(contamination=0.1)
-    customer_info['is_outlier_isolation_forest'] = isolation_forest.fit_predict(customer_info) == -1
-
-    return customer_info
-
-# SOM
-def check_multidimensional_outliers_som(data: pd.DataFrame, 
-                                        x: int, 
-                                        y: int, 
-                                        input_len: int, 
-                                        sigma: float = 1.0,
-                                        learning_rate: float = 0.5, 
-                                        random_seed: int = None,
-                                        number_of_iterations: int = 1000) -> MiniSom:
-    """
-    Train a Self-Organizing Map (SOM) using the given data.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
-        x (int): The number of rows in the SOM grid.
-        y (int): The number of columns in the SOM grid.
-        input_len (int): The number of features in the input data.
-        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
-        learning_rate (float, optional): The initial learning rate. Default is 0.5.
-        random_seed (int, optional): The seed for random number generation. Default is None.
-        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
-
-    Returns:
-        MiniSom: The trained SOM model.
-    """
-    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
-    som.random_weights_init(data)
-    som.train_random(data, num_iteration=number_of_iterations)
-
-def som_mean_clusters(data, col):
-    """
-    Calculate the mean of a specified column grouped by SOM winner nodes.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        col (str): The column name for which the mean is calculated.
-
-    Returns:
-        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
-    """
-    grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
-    return grouped
-
-def visualize_data_points_grid(data, scaled_data, som_model, color_variable, color_dict):
-    """
-    Visualize data points on a SOM grid with a distance map in the background.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        scaled_data (np.ndarray): The scaled data used for SOM training.
-        som_model (minisom.MiniSom): The trained SOM model.
-        color_variable (str): The column name used for coloring data points.
-        color_dict (dict): A dictionary mapping unique values in the color_variable to colors.
-
-    Returns:
-        None: Displays a scatter plot with the SOM grid.
-    """
-    target = data[color_variable]
-    fig, ax = plt.subplots()
-
-    # Get weights for SOM winners
-    w_x, w_y = zip(*[som_model.winner(d) for d in scaled_data])
-    w_x = np.array(w_x)
-    w_y = np.array(w_y)
-
-    # Plot distance map in the background
-    plt.pcolor(som_model.distance_map().T, cmap='bone_r', alpha=.2)
-    plt.colorbar()
-
-    # Plot data points with random perturbation to avoid overlap
-    for c in np.unique(target):
-        idx_target = target == c
-        plt.scatter(
-            w_x[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            w_y[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            s=50, c=color_dict[c], label=c
-        )
-
-    ax.legend(bbox_to_anchor=(1.2, 1.05))
-    plt.grid()
-    plt.show()
-
-def plot_feature_influence(trained_som, data):
-    """
-    Plot the influence of each feature on the SOM nodes.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        data (pd.DataFrame): The input DataFrame containing the data.
-
-    Returns:
-        None: Displays a grid of plots showing feature influence.
-    """
-    feature_names = data.columns
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(10, 10))
-    for i, f in enumerate(feature_names):
-        plt.subplot(5, 5, i + 1)
-        plt.title(f)
-        plt.pcolor(W[:, :, i].T, cmap='coolwarm')
-        plt.xticks(np.arange(15 + 1))
-        plt.yticks(np.arange(15 + 1))
-    plt.tight_layout()
-    plt.show()
-
-def plot_most_important_variable(trained_som, features):
-    """
-    Plot the most important variable for each SOM unit.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        features (list): List of feature names used in SOM training.
-
-    Returns:
-        None: Displays a plot showing the most important variable for each SOM unit.
-    """
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(8, 8))
-    for i in np.arange(W.shape[0]):
-        for j in np.arange(W.shape[1]):
-            feature = np.argmax(W[i, j, :])
-            plt.plot([i + .5], [j + .5], 'o', color='C' + str(feature),
-                     marker='s', markersize=24)
-
-    legend_elements = [
-        Patch(facecolor='C' + str(i), edgecolor='w', label=f) for i, f in enumerate(features)
-    ]
-
-    plt.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, .95))
-    plt.xlim([0, 15])
-    plt.ylim([0, 15])
-    plt.show()
-
-def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes outliers from the customer information DataFrame based on predefined conditions.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        The input DataFrame containing customer information, including various columns.
-
-    Returns:
-    --------
-    pd.DataFrame
-        A filtered DataFrame containing only rows that satisfy the outlier conditions.
-    """
-    outlier_conditions = (
-        (customer_info['kids_home'] <= 8) &
-        (customer_info['teens_home'] <= 4) &
-        (customer_info['number_complaints'] <= 4) &
-        (customer_info['distinct_stores_visited'] <= 8) &
-        (customer_info['lifetime_spend_groceries'] <= 100000) &
-        (customer_info['lifetime_spend_electronics'] <= 20000) &
-        (customer_info['lifetime_spend_vegetables'] <= 2600) &
-        (customer_info['lifetime_spend_nonalcohol_drinks'] <= 1400) &
-        (customer_info['lifetime_spend_alcohol_drinks'] <= 2800) &
-        (customer_info['lifetime_spend_meat'] <= 2600) &
-        (customer_info['lifetime_spend_fish'] <= 2800) &
-        (customer_info['lifetime_spend_hygiene'] <= 2400) &
-        (customer_info['lifetime_spend_videogames'] <= 1700) &
-        (customer_info['lifetime_spend_petfood'] <= 850) &
-        (customer_info['lifetime_total_distinct_products'] <= 600) &
-        (customer_info['percentage_of_products_bought_promotion'] >= -0.5) &
-        (customer_info['percentage_of_products_bought_promotion'] <= 1.5)
-    )
-    return customer_info[outlier_conditions]
-
-# Elbow method
-
-def elbow_method(X, k_range=range(1, 11), plot=True, random_state=42):
-    """
-    Performs the Elbow Method to help choose the optimal number of clusters for K-Means.
-    
-    Parameters:
-    - X (np.ndarray or pd.DataFrame): Input data.
-    - k_range (iterable): Range of K values to try (default: 1 to 10).
-    - scale_data (bool): Whether to scale the data using StandardScaler (recommended).
-    - plot (bool): Whether to display the elbow plot.
-    - random_state (int): Random seed for reproducibility.
-    
-    Returns:
-    - distortions (list): Sum of squared distances for each K.
-    """
-    
-    distortions = []
-    
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, 
-                        n_init=10, 
-                        max_iter=300, 
-                        random_state=random_state,
-                        algorithm='elkan')  # faster for dense data
-        kmeans.fit(X)
-        distortions.append(kmeans.inertia_)  # Sum of squared distances to closest cluster center
-    
-    if plot:
-        plt.figure(figsize=(8, 5))
-        plt.plot(list(k_range), distortions, marker='o')
-        plt.xlabel('Number of clusters (K)')
-        plt.ylabel('Inertia (Sum of Squared Distances)')
-        plt.title('Elbow Method For Optimal K')
-        plt.xticks(list(k_range))
-        plt.grid(True)
-        plt.show()
-    
-    return distortions
 
 
 #######################################
@@ -850,15 +592,10 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
     education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 15, 'Msc': 17, 'Phd': 20}
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
-    # 3
-    gender_map = {'male': 0, 'female': 1}
-    customer_info['gender'] = customer_info['customer_gender'].map(gender_map)
-
     # 4
-    customer_info.drop(['customer_gender', 'education_level'], axis = 1, inplace = True)
+    customer_info.drop(['education_level'], axis = 1, inplace = True)
 
     return customer_info
-
 
 #######################################
 ########### INCONSISTENCIES ###########
@@ -942,72 +679,45 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
         col_mask = (customer_info[col] < 0).fillna(False)
         collect(col_mask, f"Negative value in {col}")
 
-    # Remove duplicate rows
-    inconsistent_rows = inconsistent_rows.drop_duplicates()
     display(inconsistent_rows)
 
-    return pd.Series(inconsistencies), inconsistent_rows
-
-def remove_inconsistencies_pers(customer_info: pd.DataFrame) -> pd.DataFrame:
+def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
     for index, row in customer_info.iterrows():
 
         if row['kids_home'] < 0:
-            row['kids_home'] *= -1
+            customer_info.loc[index, 'kids_home'] *= -1
         if row['teens_home'] < 0:
-            row['teens_home'] *= -1
+            customer_info.loc[index, 'teens_home'] *= -1
 
         if row['number_complaints'] < 0:
-            row['number_complaints'] = 0
+            customer_info.loc[index, 'number_complaints'] = 0
 
         if row['distinct_stores_visited'] < 0:
-            row['distinct_stores_visited'] *= -1
+            customer_info.loc[index, 'distinct_stores_visited'] *= -1
 
         if row['year_first_transaction'] > 2025:
-            row['year_first_transaction'] = 2025
+            customer_info.loc[index, 'year_first_transaction'] = 2025
 
         if row['lifetime_total_distinct_products'] < 0:
-            row['lifetime_total_distinct_products'] *= -1
+            customer_info.loc[index, 'lifetime_total_distinct_products'] *= -1
         elif row['lifetime_total_distinct_products'] == 0:
-            row['lifetime_total_distinct_products'] = 1
+            customer_info.loc[index, 'lifetime_total_distinct_products'] = 1
 
         if row['distinct_products_sum'] > row['lifetime_total_distinct_products']:
-            row['lifetime_total_distinct_products'] = row['distinct_products_sum']
+            customer_info.loc[index, 'lifetime_total_distinct_products'] = row['distinct_products_sum']
 
         if row['percentage_of_products_bought_promotion'] < 0:
-            row['percentage_of_products_bought_promotion'] = 0
+            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 0
         elif row['percentage_of_products_bought_promotion'] > 1:
-            row['percentage_of_products_bought_promotion'] = 1
-
-        #if row['typical_hour'] < 0 or row['typical_hour'] > 23:
-        #    row['typical_hour'] = 0
+            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 1
 
         for col in customer_info.columns:
             if col.startswith('lifetime_spend_'):
                 if row[col] < 0:
-                    row[col] *= -1
-        #spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
-        #total_spend = sum(row[col] for col in spend_cols)
-        #if total_spend == 0:
-        #    row['number_complaints'] = 0
-        #    row['distinct_stores_visited'] = 0
-        #    row['lifetime_total_distinct_products'] = 0
+                    customer_info.loc[index, col] *= -1
+
     return customer_info
 
-def remove_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes inconsistent rows from the customer_info DataFrame based on the inconsistencies identified
-    by the check_inconsistencies function.
-
-    Args:
-        customer_info (pd.DataFrame): The input DataFrame containing customer information.
-
-    Returns:
-        pd.DataFrame: The cleaned DataFrame with inconsistencies removed.
-    """
-    _, inconsistent_rows = check_inconsistencies(customer_info)
-    
-    customer_info = customer_info.drop(inconsistent_rows.index)
-    return customer_info
 
 #######################################
 ############### SCALING ###############
@@ -1045,12 +755,77 @@ def scaling(data: pd.DataFrame) -> pd.DataFrame:
 ############# REDUNDANCY ##############
 #######################################
 
+def correlation_matrix(customer_info: pd.DataFrame) -> list:
 
-def correlation_matrix(customer_info: pd.DataFrame) -> None:
+    """
+    Generates an interactive correlation matrix heatmap using Plotly and identifies strongly correlated pairs.
 
+    Args:
+        customer_info (pd.DataFrame): The input DataFrame containing numerical data.
+        threshold (float): The correlation threshold to highlight strong correlations.
+
+    Returns:
+        list: A list of tuples containing pairs of columns with correlation above the threshold.
+    """
     corr = customer_info.corr()
 
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
-    plt.title("Correlation Matrix")
-    plt.show()
+    fig = go.Figure(data=go.Heatmap(
+        z=corr.values,
+        x=corr.columns,
+        y=corr.columns,
+        colorscale='rdylbu',
+        colorbar=dict(title="Correlation"),
+        zmin=-1, zmax=1
+    ))
+
+    fig.update_layout(
+        title="Correlation Matrix",
+        xaxis=dict(tickangle=45),
+        yaxis=dict(tickangle=0),
+        autosize=True,
+        width=1000,
+        height=1000
+    )
+
+    fig.show()
+
+#######################################
+########## FEATURE SELECTION ##########
+#######################################
+
+
+def feature_selection_with_clustering(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
+    feature_importance = pd.DataFrame(index=data.columns)
+
+    data_np = data.values  # Conversão para numpy array
+
+    # SOM
+    som = MiniSom(x=1, y=n_clusters, input_len=data.shape[1], sigma=0.5, learning_rate=0.5)
+    som.random_weights_init(data_np)
+    som.train_random(data_np, 100)
+    som_weights = som.get_weights()[0]
+    som_importance = np.std(som_weights, axis=0) > np.mean(np.std(som_weights, axis=0))
+    feature_importance['SOM'] = som_importance
+
+    # K-Means
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(data.T)
+    kmeans_importance = pd.Series(kmeans.labels_).value_counts(normalize=True) < 0.5
+    feature_importance['K-Means'] = [kmeans_importance[label] for label in kmeans.labels_]
+
+    # Hierarchical Clustering
+    linkage_matrix = linkage(data.T, method='ward')
+    hierarchical_labels = fcluster(linkage_matrix, t=n_clusters, criterion='maxclust')
+    hierarchical_importance = pd.Series(hierarchical_labels).value_counts(normalize=True) < 0.5
+    feature_importance['Hierarchical'] = [hierarchical_importance[label] for label in hierarchical_labels]
+
+    return feature_importance
+
+def feature_selection(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
+
+    feature_importance = feature_selection_with_clustering(data, n_clusters).T
+    columns_to_delete = feature_importance.columns[feature_importance.sum(axis=0) == 0]
+    feature_importance.drop(columns=columns_to_delete, inplace=True)
+    data = data.loc[:, feature_importance.columns]
+
+    return data
