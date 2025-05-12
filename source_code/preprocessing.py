@@ -881,15 +881,15 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
 def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFrame):
     """
     Counts the number of occurrences for each inconsistency in customer_info,
-    and returns the inconsistent rows in a new DataFrame.
-    
+    and returns the inconsistent rows in a new DataFrame with a column indicating the inconsistency.
+
     Args:
         customer_info (pd.DataFrame): The input DataFrame.
 
     Returns:
         Tuple[pd.Series, pd.DataFrame]: 
             - A series where the index is the inconsistency description and the value is the count.
-            - A DataFrame containing the rows with inconsistencies.
+            - A DataFrame containing the rows with inconsistencies and a column 'inconsistency' describing the issue.
     """
     inconsistencies = {}
     inconsistent_rows = pd.DataFrame()
@@ -898,7 +898,9 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     def collect(mask, label):
         nonlocal inconsistent_rows
         inconsistencies[label] = mask.sum()
-        inconsistent_rows = pd.concat([inconsistent_rows, customer_info[mask]])
+        temp = customer_info[mask].copy()
+        temp['inconsistency'] = label
+        inconsistent_rows = pd.concat([inconsistent_rows, temp])
 
     # 1. Negative kids_home
     mask = (customer_info['kids_home'] < 0).fillna(False)
@@ -927,37 +929,18 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     mask = (customer_info['year_first_transaction'] > 2025).fillna(False)
     collect(mask, "Year of first transaction > 2025")
 
-    # 7. Zero total spend but high complaints/stores/products
-    spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
-    total_spend = customer_info[spend_cols].sum(axis=1)
-    mask = (
-        (total_spend == 0) &
-        (
-            (customer_info['number_complaints'] > 0).fillna(False) |
-            (customer_info['distinct_stores_visited'] > 0).fillna(False) |
-            (customer_info['lifetime_total_distinct_products'] > 0).fillna(False)
-        )
-    )
-    collect(mask, "Zero total spend but high complaints/stores/products")
-
-    # 8. Percentage of products bought promotion < 0 or > 1
+    # 7. Percentage of products bought promotion < 0 or > 1
     mask = (
         (customer_info['percentage_of_products_bought_promotion'] < 0) |
         (customer_info['percentage_of_products_bought_promotion'] > 1)
     ).fillna(False)
     collect(mask, "Percentage of products bought promotion < 0 or > 1")
 
-    # 9. Typical hour not between 0 and 23
-    mask = ~customer_info['typical_hour'].between(0, 23, inclusive='both').fillna(False)
-    collect(mask, "Typical hour not between 0 and 23")
-
-    # 10. Negative lifetime spend values
-    spend_issues = pd.DataFrame()
+    # 8. Negative lifetime spend values
+    spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
     for col in spend_cols:
         col_mask = (customer_info[col] < 0).fillna(False)
-        spend_issues = pd.concat([spend_issues, customer_info[col_mask]])
-    inconsistencies["Negative lifetime spend values"] = spend_issues.drop_duplicates().shape[0]
-    inconsistent_rows = pd.concat([inconsistent_rows, spend_issues.drop_duplicates()])
+        collect(col_mask, f"Negative value in {col}")
 
     # Remove duplicate rows
     inconsistent_rows = inconsistent_rows.drop_duplicates()
@@ -967,36 +950,47 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
 
 def remove_inconsistencies_pers(customer_info: pd.DataFrame) -> pd.DataFrame:
     for index, row in customer_info.iterrows():
+
         if row['kids_home'] < 0:
             row['kids_home'] *= -1
         if row['teens_home'] < 0:
             row['teens_home'] *= -1
+
         if row['number_complaints'] < 0:
             row['number_complaints'] = 0
+
         if row['distinct_stores_visited'] < 0:
-            row['distinct_stores_visited'] = 0
+            row['distinct_stores_visited'] *= -1
+
         if row['year_first_transaction'] > 2025:
             row['year_first_transaction'] = 2025
-        if row['lifetime_total_distinct_products'] <= 0:
-            row['lifetime_total_distinct_products'] = 0
+
+        if row['lifetime_total_distinct_products'] < 0:
+            row['lifetime_total_distinct_products'] *= -1
+        elif row['lifetime_total_distinct_products'] == 0:
+            row['lifetime_total_distinct_products'] = 1
+
         if row['distinct_products_sum'] > row['lifetime_total_distinct_products']:
-            row['distinct_products_sum'] = row['lifetime_total_distinct_products']
+            row['lifetime_total_distinct_products'] = row['distinct_products_sum']
+
         if row['percentage_of_products_bought_promotion'] < 0:
             row['percentage_of_products_bought_promotion'] = 0
-        if row['percentage_of_products_bought_promotion'] > 1:
+        elif row['percentage_of_products_bought_promotion'] > 1:
             row['percentage_of_products_bought_promotion'] = 1
+
         #if row['typical_hour'] < 0 or row['typical_hour'] > 23:
         #    row['typical_hour'] = 0
+
         for col in customer_info.columns:
             if col.startswith('lifetime_spend_'):
                 if row[col] < 0:
-                    row[col] = 0
-        spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
-        total_spend = sum(row[col] for col in spend_cols)
-        if total_spend == 0:
-            row['number_complaints'] = 0
-            row['distinct_stores_visited'] = 0
-            row['lifetime_total_distinct_products'] = 0
+                    row[col] *= -1
+        #spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
+        #total_spend = sum(row[col] for col in spend_cols)
+        #if total_spend == 0:
+        #    row['number_complaints'] = 0
+        #    row['distinct_stores_visited'] = 0
+        #    row['lifetime_total_distinct_products'] = 0
     return customer_info
 
 def remove_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
