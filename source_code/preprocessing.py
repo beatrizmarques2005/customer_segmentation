@@ -6,9 +6,10 @@ from sklearn.impute import KNNImputer
 from sklearn.preprocessing import LabelEncoder
 import geopandas as gpd
 from shapely.geometry import Point
-from sklearn.cluster import MeanShift, DBSCAN
+from sklearn.cluster import MeanShift, DBSCAN, KMeans
 from sklearn.ensemble import IsolationForest
 from minisom import MiniSom
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 #######################################
@@ -71,6 +72,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
        - The `age` is computed based on the difference between a fixed reference date (2023-06-09) and the birthdate.
     3. Calculating the number of unique invoices and distinct products bought for each customer.
         - Customers without any invoices or products bought in the `customer_basket` DataFrame will be set to NaN, as customer_basket is just a sample dataset.
+    4. Removing the `gender` column from the DataFrame.
 
     Parameters:
     -----------
@@ -89,6 +91,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
         - The `customer_name` column updated to exclude the education level prefix.
         - The `customer_birthdate` column converted to datetime format.
         - A new column `age` containing the customer's age in years (calculated as an integer).
+        - The `gender` column removed.
     Notes:
     ------
     - If the `customer_name` does not contain a period, the entire name is retained, and `education_level` is set to NaN.
@@ -121,6 +124,10 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
         on='customer_id',
         how='left'
     )
+
+    # 4
+    if 'gender' in customer_info.columns:
+        customer_info.drop(columns=['gender'], inplace=True)
 
     return customer_info
 
@@ -201,6 +208,8 @@ def treat_duplicates(data: pd.DataFrame) -> pd.DataFrame:
 #######################################
 ############### OUTLIERS ##############
 #######################################
+
+## One Dimensional Outliers
 
 def check_outliers_numerical_boxplot(customer_info: pd.DataFrame) -> None:
     """
@@ -363,6 +372,8 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
     )
 
     fig.show()
+
+## Multi Dimensional Outliers
 
 # DBSCAN
 def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, nr_obs_small_clusters: int, eps_parameter: float) -> None:
@@ -616,6 +627,46 @@ def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
     )
     return customer_info[outlier_conditions]
 
+# Elbow method
+
+def elbow_method(X, k_range=range(1, 11), plot=True, random_state=42):
+    """
+    Performs the Elbow Method to help choose the optimal number of clusters for K-Means.
+    
+    Parameters:
+    - X (np.ndarray or pd.DataFrame): Input data.
+    - k_range (iterable): Range of K values to try (default: 1 to 10).
+    - scale_data (bool): Whether to scale the data using StandardScaler (recommended).
+    - plot (bool): Whether to display the elbow plot.
+    - random_state (int): Random seed for reproducibility.
+    
+    Returns:
+    - distortions (list): Sum of squared distances for each K.
+    """
+    
+    distortions = []
+    
+    for k in k_range:
+        kmeans = KMeans(n_clusters=k, 
+                        n_init=10, 
+                        max_iter=300, 
+                        random_state=random_state,
+                        algorithm='elkan')  # faster for dense data
+        kmeans.fit(X)
+        distortions.append(kmeans.inertia_)  # Sum of squared distances to closest cluster center
+    
+    if plot:
+        plt.figure(figsize=(8, 5))
+        plt.plot(list(k_range), distortions, marker='o')
+        plt.xlabel('Number of clusters (K)')
+        plt.ylabel('Inertia (Sum of Squared Distances)')
+        plt.title('Elbow Method For Optimal K')
+        plt.xticks(list(k_range))
+        plt.grid(True)
+        plt.show()
+    
+    return distortions
+
 
 #######################################
 ############ MISSING VALUES ###########
@@ -799,7 +850,7 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
     customer_info.drop(['customer_name', 'customer_birthdate'], axis = 1, inplace = True)
 
     # 2
-    education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 16, 'Msc': 18, 'Phd': 21}
+    education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 15, 'Msc': 17, 'Phd': 20}
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
     # 3
@@ -933,65 +984,6 @@ def remove_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
     customer_info = customer_info.drop(inconsistent_rows.index)
     return customer_info
 
-def plot_geolocation_interactive(data, latitude_col='latitude', longitude_col='longitude'):
-
-    # Ensure latitude and longitude columns exist
-    if latitude_col not in data.columns or longitude_col not in data.columns:
-        raise ValueError(f"Columns '{latitude_col}' and '{longitude_col}' must exist in the dataframe.")
-    
-    # Create a scatter mapbox plot using Plotly
-    fig = go.Figure(go.Scattermapbox(
-        lat=data[latitude_col],
-        lon=data[longitude_col],
-        mode='markers',
-        marker=go.scattermapbox.Marker(size=9, color='red'),
-        text=data.index,  # Display index or other relevant info on hover
-        hoverinfo='text'
-    ))
-    
-    # Set the layout for the map
-    fig.update_layout(
-        mapbox=dict(
-            style="open-street-map",
-            zoom=3,  # Adjust zoom level as needed
-            center=dict(lat=data[latitude_col].mean(), lon=data[longitude_col].mean())
-        ),
-        margin={"r":0,"t":0,"l":0,"b":0},  # Remove margins for a cleaner look
-        title="Interactive Geolocation Map"
-    )
-    
-    fig.show()
-
-def remove_far_from_coast(data, latitude_col='latitude', longitude_col='longitude'):
-
-    # Load a world map shapefile using GeoPandas
-    world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    world = world[world['geometry'].type == 'Polygon']  # Keep only polygons (land masses)
-
-    # Convert the DataFrame to a GeoDataFrame
-    geometry = [Point(xy) for xy in zip(data[longitude_col], data[latitude_col])]
-    geo_data = gpd.GeoDataFrame(data, geometry=geometry)
-
-    # Re-project to a projected CRS for accurate buffering
-    world = world.to_crs(epsg=3395)  # Use a projected CRS like EPSG:3395 (World Mercator)
-
-    # Buffer the land polygons by 1 km
-    buffered_land = world.buffer(1000)  # Buffer by 1000 meters (1 km)
-
-    # Re-project back to the original geographic CRS
-    buffered_land = buffered_land.to_crs(epsg=4326)  # EPSG:4326 is WGS84 (geographic CRS)
-
-    # Check if points are within the buffered land polygons
-    geo_data['near_coast'] = geo_data['geometry'].apply(
-        lambda point: any(buffered_land.contains(point))
-    )
-
-    # Filter out points that are not near the coast
-    filtered_data = geo_data[geo_data['near_coast']].drop(columns=['geometry', 'near_coast'])
-
-    return filtered_data
-
-
 #######################################
 ############### SCALING ###############
 #######################################
@@ -1024,7 +1016,16 @@ def scaling(data: pd.DataFrame) -> pd.DataFrame:
     return scaled_data
 
 
+#######################################
+############# REDUNDANCY ##############
+#######################################
 
 
+def correlation_matrix(customer_info: pd.DataFrame) -> None:
 
+    corr = customer_info.corr()
 
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
+    plt.title("Correlation Matrix")
+    plt.show()
