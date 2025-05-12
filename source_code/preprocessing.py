@@ -10,6 +10,7 @@ from sklearn.cluster import MeanShift, DBSCAN, KMeans
 from sklearn.ensemble import IsolationForest
 from minisom import MiniSom
 import seaborn as sns
+from scipy.cluster.hierarchy import linkage, fcluster
 import matplotlib.pyplot as plt
 
 #######################################
@@ -126,8 +127,8 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     )
 
     # 4
-    if 'gender' in customer_info.columns:
-        customer_info.drop(columns=['gender'], inplace=True)
+    if 'customer_gender' in customer_info.columns:
+        customer_info.drop(columns=['customer_gender'], inplace=True)
 
     return customer_info
 
@@ -326,7 +327,6 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
                                       should include the specified categorical columns and numerical
                                       columns with categorical behavior.
     Categorical Columns:
-        - 'customer_gender'
         - 'education_level'
     Numerical Columns with Categorical Behavior:
         - 'kids_home'
@@ -339,7 +339,7 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
         None: The function displays the interactive Plotly figure and does not return any value.
 
     """
-    categorical_columns = ['customer_gender', 'education_level']
+    categorical_columns = ['education_level']
     numerical_with_categorical_behaviour= ['kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
     categorical_columns.extend(numerical_with_categorical_behaviour)
 
@@ -373,59 +373,36 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
-## Multi Dimensional Outliers
+## Multi Dimensional Outliers --> DBSCAN
 
-# DBSCAN
-def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, nr_obs_small_clusters: int, eps_parameter: float) -> None:
-    """
-    Identifies multidimensional outliers using the DBSCAN clustering algorithm and visualizes the results.
+def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> None:
 
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
 
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
-
-    dbscan = DBSCAN(eps=eps_parameter, min_samples=nr_obs_small_clusters)
     customer_info['cluster_dbscan'] = dbscan.fit_predict(customer_info)
 
     customer_info['is_outlier_dbscan'] = customer_info['cluster_dbscan'] == -1
 
     return customer_info
 
-# Mean Shift
-def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
-    """
-    Identifies multidimensional outliers using the Mean Shift clustering algorithm and visualizes the results.
+def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: int, eps_range: tuple) -> None:
 
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
-    
-    nr_obs_small_clusters : int
-        The threshold for the minimum number of observations in a cluster to be considered valid.
-        Below this threshold, the cluster is considered small, therefore the point is an outlier.
+    for eps in np.arange(*eps_range):
+        
+        print('=====================================')
+        ci_dbscan = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
+        cluster_comparison = ci_dbscan.groupby(['cluster_dbscan', 'is_outlier_dbscan']).size().reset_index(name='number_of_customers')
 
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
+        num_clusters = cluster_comparison[cluster_comparison['is_outlier_dbscan'] == 0]['cluster_dbscan'].nunique()
+        total_outliers = cluster_comparison[cluster_comparison["is_outlier_dbscan"] == 1]["number_of_customers"].sum()
 
-    mean_shift = MeanShift()
-    mean_shift.fit(customer_info)
+        print(f"With eps = {eps}\n\tNumber of clusters (not outliers): {num_clusters}\n\tTotal number of outliers: {total_outliers}")
 
-    customer_info['cluster_mean_shift'] = mean_shift.labels_
+def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> pd.DataFrame:
 
-    cluster_sizes = customer_info['cluster_mean_shift'].value_counts()
-    small_clusters = cluster_sizes[cluster_sizes < nr_obs_small_clusters].index  # Threshold
-    customer_info['is_outlier_mean_shift'] = customer_info['cluster_mean_shift'].isin(small_clusters)
+    customer_info = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
+    customer_info = customer_info[customer_info['is_outlier_dbscan'] == False]
+    customer_info.drop(columns=['cluster_dbscan', 'is_outlier_dbscan'], inplace=True)
 
     return customer_info
 
@@ -853,15 +830,10 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
     education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 15, 'Msc': 17, 'Phd': 20}
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
-    # 3
-    gender_map = {'male': 0, 'female': 1}
-    customer_info['gender'] = customer_info['customer_gender'].map(gender_map)
-
     # 4
-    customer_info.drop(['customer_gender', 'education_level'], axis = 1, inplace = True)
+    customer_info.drop(['education_level'], axis = 1, inplace = True)
 
     return customer_info
-
 
 #######################################
 ########### INCONSISTENCIES ###########
@@ -884,15 +856,15 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
 def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFrame):
     """
     Counts the number of occurrences for each inconsistency in customer_info,
-    and returns the inconsistent rows in a new DataFrame.
-    
+    and returns the inconsistent rows in a new DataFrame with a column indicating the inconsistency.
+
     Args:
         customer_info (pd.DataFrame): The input DataFrame.
 
     Returns:
         Tuple[pd.Series, pd.DataFrame]: 
             - A series where the index is the inconsistency description and the value is the count.
-            - A DataFrame containing the rows with inconsistencies.
+            - A DataFrame containing the rows with inconsistencies and a column 'inconsistency' describing the issue.
     """
     inconsistencies = {}
     inconsistent_rows = pd.DataFrame()
@@ -901,7 +873,9 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     def collect(mask, label):
         nonlocal inconsistent_rows
         inconsistencies[label] = mask.sum()
-        inconsistent_rows = pd.concat([inconsistent_rows, customer_info[mask]])
+        temp = customer_info[mask].copy()
+        temp['inconsistency'] = label
+        inconsistent_rows = pd.concat([inconsistent_rows, temp])
 
     # 1. Negative kids_home
     mask = (customer_info['kids_home'] < 0).fillna(False)
@@ -930,59 +904,58 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     mask = (customer_info['year_first_transaction'] > 2025).fillna(False)
     collect(mask, "Year of first transaction > 2025")
 
-    # 7. Zero total spend but high complaints/stores/products
-    spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
-    total_spend = customer_info[spend_cols].sum(axis=1)
-    mask = (
-        (total_spend == 0) &
-        (
-            (customer_info['number_complaints'] > 0).fillna(False) |
-            (customer_info['distinct_stores_visited'] > 0).fillna(False) |
-            (customer_info['lifetime_total_distinct_products'] > 0).fillna(False)
-        )
-    )
-    collect(mask, "Zero total spend but high complaints/stores/products")
-
-    # 8. Percentage of products bought promotion < 0 or > 1
+    # 7. Percentage of products bought promotion < 0 or > 1
     mask = (
         (customer_info['percentage_of_products_bought_promotion'] < 0) |
         (customer_info['percentage_of_products_bought_promotion'] > 1)
     ).fillna(False)
     collect(mask, "Percentage of products bought promotion < 0 or > 1")
 
-    # 9. Typical hour not between 0 and 23
-    mask = ~customer_info['typical_hour'].between(0, 23, inclusive='both').fillna(False)
-    collect(mask, "Typical hour not between 0 and 23")
-
-    # 10. Negative lifetime spend values
-    spend_issues = pd.DataFrame()
+    # 8. Negative lifetime spend values
+    spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
     for col in spend_cols:
         col_mask = (customer_info[col] < 0).fillna(False)
-        spend_issues = pd.concat([spend_issues, customer_info[col_mask]])
-    inconsistencies["Negative lifetime spend values"] = spend_issues.drop_duplicates().shape[0]
-    inconsistent_rows = pd.concat([inconsistent_rows, spend_issues.drop_duplicates()])
+        collect(col_mask, f"Negative value in {col}")
 
-    # Remove duplicate rows
-    inconsistent_rows = inconsistent_rows.drop_duplicates()
     display(inconsistent_rows)
 
-    return pd.Series(inconsistencies), inconsistent_rows
+def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
+    for index, row in customer_info.iterrows():
 
-def remove_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes inconsistent rows from the customer_info DataFrame based on the inconsistencies identified
-    by the check_inconsistencies function.
+        if row['kids_home'] < 0:
+            customer_info.loc[index, 'kids_home'] *= -1
+        if row['teens_home'] < 0:
+            customer_info.loc[index, 'teens_home'] *= -1
 
-    Args:
-        customer_info (pd.DataFrame): The input DataFrame containing customer information.
+        if row['number_complaints'] < 0:
+            customer_info.loc[index, 'number_complaints'] = 0
 
-    Returns:
-        pd.DataFrame: The cleaned DataFrame with inconsistencies removed.
-    """
-    _, inconsistent_rows = check_inconsistencies(customer_info)
-    
-    customer_info = customer_info.drop(inconsistent_rows.index)
+        if row['distinct_stores_visited'] < 0:
+            customer_info.loc[index, 'distinct_stores_visited'] *= -1
+
+        if row['year_first_transaction'] > 2025:
+            customer_info.loc[index, 'year_first_transaction'] = 2025
+
+        if row['lifetime_total_distinct_products'] < 0:
+            customer_info.loc[index, 'lifetime_total_distinct_products'] *= -1
+        elif row['lifetime_total_distinct_products'] == 0:
+            customer_info.loc[index, 'lifetime_total_distinct_products'] = 1
+
+        if row['distinct_products_sum'] > row['lifetime_total_distinct_products']:
+            customer_info.loc[index, 'lifetime_total_distinct_products'] = row['distinct_products_sum']
+
+        if row['percentage_of_products_bought_promotion'] < 0:
+            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 0
+        elif row['percentage_of_products_bought_promotion'] > 1:
+            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 1
+
+        for col in customer_info.columns:
+            if col.startswith('lifetime_spend_'):
+                if row[col] < 0:
+                    customer_info.loc[index, col] *= -1
+
     return customer_info
+
 
 #######################################
 ############### SCALING ###############
@@ -1020,12 +993,77 @@ def scaling(data: pd.DataFrame) -> pd.DataFrame:
 ############# REDUNDANCY ##############
 #######################################
 
+def correlation_matrix(customer_info: pd.DataFrame) -> list:
 
-def correlation_matrix(customer_info: pd.DataFrame) -> None:
+    """
+    Generates an interactive correlation matrix heatmap using Plotly and identifies strongly correlated pairs.
 
+    Args:
+        customer_info (pd.DataFrame): The input DataFrame containing numerical data.
+        threshold (float): The correlation threshold to highlight strong correlations.
+
+    Returns:
+        list: A list of tuples containing pairs of columns with correlation above the threshold.
+    """
     corr = customer_info.corr()
 
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
-    plt.title("Correlation Matrix")
-    plt.show()
+    fig = go.Figure(data=go.Heatmap(
+        z=corr.values,
+        x=corr.columns,
+        y=corr.columns,
+        colorscale='rdylbu',
+        colorbar=dict(title="Correlation"),
+        zmin=-1, zmax=1
+    ))
+
+    fig.update_layout(
+        title="Correlation Matrix",
+        xaxis=dict(tickangle=45),
+        yaxis=dict(tickangle=0),
+        autosize=True,
+        width=1000,
+        height=1000
+    )
+
+    fig.show()
+
+#######################################
+########## FEATURE SELECTION ##########
+#######################################
+
+
+def feature_selection_with_clustering(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
+    feature_importance = pd.DataFrame(index=data.columns)
+
+    data_np = data.values  # Conversão para numpy array
+
+    # SOM
+    som = MiniSom(x=1, y=n_clusters, input_len=data.shape[1], sigma=0.5, learning_rate=0.5)
+    som.random_weights_init(data_np)
+    som.train_random(data_np, 100)
+    som_weights = som.get_weights()[0]
+    som_importance = np.std(som_weights, axis=0) > np.mean(np.std(som_weights, axis=0))
+    feature_importance['SOM'] = som_importance
+
+    # K-Means
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(data.T)
+    kmeans_importance = pd.Series(kmeans.labels_).value_counts(normalize=True) < 0.5
+    feature_importance['K-Means'] = [kmeans_importance[label] for label in kmeans.labels_]
+
+    # Hierarchical Clustering
+    linkage_matrix = linkage(data.T, method='ward')
+    hierarchical_labels = fcluster(linkage_matrix, t=n_clusters, criterion='maxclust')
+    hierarchical_importance = pd.Series(hierarchical_labels).value_counts(normalize=True) < 0.5
+    feature_importance['Hierarchical'] = [hierarchical_importance[label] for label in hierarchical_labels]
+
+    return feature_importance
+
+def feature_selection(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
+
+    feature_importance = feature_selection_with_clustering(data, n_clusters).T
+    columns_to_delete = feature_importance.columns[feature_importance.sum(axis=0) == 0]
+    feature_importance.drop(columns=columns_to_delete, inplace=True)
+    data = data.loc[:, feature_importance.columns]
+
+    return data
