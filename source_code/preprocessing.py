@@ -7,7 +7,6 @@ from sklearn.preprocessing import LabelEncoder
 import geopandas as gpd
 from shapely.geometry import Point
 from sklearn.cluster import MeanShift, DBSCAN, KMeans
-from sklearn.ensemble import IsolationForest
 from minisom import MiniSom
 import seaborn as sns
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -405,32 +404,6 @@ def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samp
     customer_info.drop(columns=['cluster_dbscan', 'is_outlier_dbscan'], inplace=True)
 
     return customer_info
-
-# Isolation Forest
-def check_multidimensional_outliers_isolation_forest(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
-    """
-    Identifies multidimensional outliers using the Isolation Forest algorithm and visualizes the results.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
-    
-    nr_obs_small_clusters : int
-        The threshold for the minimum number of observations in a cluster to be considered valid.
-        Below this threshold, the cluster is considered small, therefore the point is an outlier.
-
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
-
-    isolation_forest = IsolationForest(contamination=0.1)
-    customer_info['is_outlier_isolation_forest'] = isolation_forest.fit_predict(customer_info) == -1
-
-    return customer_info
-
 
 # SOM
 def check_multidimensional_outliers_som(data_np: np.ndarray, 
