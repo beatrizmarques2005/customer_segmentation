@@ -76,6 +76,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     3. Calculating the number of unique invoices and distinct products bought for each customer.
         - Customers without any invoices or products bought in the `customer_basket` DataFrame will be set to NaN, as customer_basket is just a sample dataset.
     4. Removing the `gender` column from the DataFrame.
+    5. Deleting columns that are not relevant
 
     Parameters:
     -----------
@@ -106,7 +107,6 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
     customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
     customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
-    customer_info.drop(['customer_name'], inplace=True)
 
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
@@ -114,7 +114,6 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     customer_info['birth_month'] = customer_info['customer_birthdate'].dt.month
     customer_info['birth_day'] = customer_info['customer_birthdate'].dt.day
     customer_info['birth_year'] = customer_info['customer_birthdate'].dt.year
-    customer_info.drop(['customer_birthdate'], axis=1, inplace=True)
 
     # 3
     summary_df = customer_basket.groupby('customer_id').agg(
@@ -133,6 +132,9 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     # 4
     if 'customer_gender' in customer_info.columns:
         customer_info.drop(columns=['customer_gender'], inplace=True)
+
+    # 5
+    customer_info.drop(['customer_name', 'customer_birthdate', 'loyalty_card_number'], axis = 1, inplace = True)
 
     return customer_info
 
@@ -537,6 +539,7 @@ def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samp
 ############ MISSING VALUES ###########
 #######################################
 
+'''
 def impute_loyalty_card(customer_info:pd.DataFrame) -> pd.DataFrame:
     """
     Imputes missing values in the 'loyalty_card_number' column of the customer_info DataFrame with 0.
@@ -551,6 +554,7 @@ def impute_loyalty_card(customer_info:pd.DataFrame) -> pd.DataFrame:
     customer_info['loyalty_card_number'].fillna(0, inplace=True)
 
     return customer_info
+    '''
 
 def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
@@ -643,7 +647,7 @@ def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The DataFrame with missing values imputed.
     """
-    customer_info = impute_loyalty_card(customer_info)
+    #customer_info = impute_loyalty_card(customer_info)
     customer_info = impute_kids_teens_home(customer_info)
     customer_info = impute_lifetime_spend_alcohol_drinks(customer_info)
     customer_info = impute_education_level(customer_info)
