@@ -372,6 +372,22 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
+def winsorization(reference_df, apply_to_df):
+    for col in ["lifetime_spend_groceries", "lifetime_spend_electronics", "lifetime_spend_vegetables", "lifetime_spend_nonalcohol_drinks", "lifetime_spend_alcohol_drinks", "lifetime_spend_meat", "lifetime_spend_fish", "lifetime_spend_hygiene", "lifetime_spend_videogames", "lifetime_spend_petfood"]:
+
+        Q1 = reference_df[col].quantile(0.25)
+        Q3 = reference_df[col].quantile(0.75)
+    
+        IQR = Q3 - Q1
+    
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+    
+        apply_to_df.loc[apply_to_df[col] < lower_bound, col] = lower_bound
+        apply_to_df.loc[apply_to_df[col] > upper_bound, col] = upper_bound
+
+    return apply_to_df
+
 ## Multi Dimensional Outliers --> DBSCAN
 
 def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> None:
