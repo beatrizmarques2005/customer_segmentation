@@ -2,18 +2,64 @@ from sklearn.cluster import AgglomerativeClustering, KMeans, DBSCAN, MeanShift, 
 from minisom import MiniSom
 import pandas as pd
 from sklearn.cluster import estimate_bandwidth
+from scipy.cluster.hierarchy import dendrogram
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
+    summary = data.groupby(cluster_col).mean().T
+
+    plt.figure(figsize=(10, min(1 + 0.5 * summary.shape[0], 12)))
+    sns.heatmap(summary, annot=True, fmt=".2f", cmap="viridis")
+    plt.title("Cluster Feature Means")
+    plt.ylabel("Features")
+    plt.xlabel("Cluster")
+    plt.tight_layout()
+    plt.show()
+
+    return summary
 
 #######################################
 ############ HIERARQUICAL #############
 #######################################
 
-def hierarchical_clustering(data: pd.DataFrame) -> pd.DataFrame:
+def hierarchical_clustering(data: pd.DataFrame, n_clusters: int = None) -> tuple[pd.DataFrame, AgglomerativeClustering]:
+    data = data.copy()
 
-    model = AgglomerativeClustering()
+    if n_clusters is None:
+        model = AgglomerativeClustering(distance_threshold=0, n_clusters=None)
+    else:
+        model = AgglomerativeClustering(n_clusters=n_clusters)
 
-    data['cluster'] = model.fit_predict(data)
+    model.fit(data)
+    data['cluster'] = model.labels_
+    return data, model
 
-    return data
+
+def plot_dendrogram(model, **kwargs):
+
+    counts = np.zeros(model.children_.shape[0])
+    n_samples = len(model.labels_)
+
+    for i, merge in enumerate(model.children_):
+        current_count = 0
+
+        for child_idx in merge:
+            if child_idx < n_samples:
+                current_count += 1  # leaf node
+            else:
+                current_count += counts[child_idx - n_samples]
+
+        counts[i] = current_count
+
+    linkage_matrix = np.column_stack(
+        [model.children_, model.distances_, counts]
+    ).astype(float)
+
+    dendrogram(linkage_matrix, **kwargs)
+
 
 #######################################
 ############### KMeans ################
