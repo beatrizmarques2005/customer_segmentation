@@ -6,7 +6,7 @@ from sklearn.impute import KNNImputer
 from sklearn.preprocessing import LabelEncoder
 import geopandas as gpd
 from shapely.geometry import Point
-from sklearn.cluster import MeanShift, DBSCAN, KMeans
+from sklearn.cluster import DBSCAN, KMeans
 from minisom import MiniSom
 import seaborn as sns
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -14,6 +14,7 @@ import shap
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+
 #######################################
 ######### GENERAL EXPLORATION #########
 #######################################
@@ -105,6 +106,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
     customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
     customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
+    customer_info.drop(['customer_name'], inplace=True)
 
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
@@ -112,6 +114,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     customer_info['birth_month'] = customer_info['customer_birthdate'].dt.month
     customer_info['birth_day'] = customer_info['customer_birthdate'].dt.day
     customer_info['birth_year'] = customer_info['customer_birthdate'].dt.year
+    customer_info.drop(['customer_birthdate'], axis=1, inplace=True)
 
     # 3
     summary_df = customer_basket.groupby('customer_id').agg(
@@ -206,6 +209,113 @@ def treat_duplicates(data: pd.DataFrame) -> pd.DataFrame:
 
     return data
 
+
+#######################################
+########### INCONSISTENCIES ###########
+#######################################
+
+def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFrame):
+    """
+    Counts the number of occurrences for each inconsistency in customer_info,
+    and returns the inconsistent rows in a new DataFrame with a column indicating the inconsistency.
+
+    Args:
+        customer_info (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        Tuple[pd.Series, pd.DataFrame]: 
+            - A series where the index is the inconsistency description and the value is the count.
+            - A DataFrame containing the rows with inconsistencies and a column 'inconsistency' describing the issue.
+    """
+    inconsistencies = {}
+    inconsistent_rows = pd.DataFrame()
+
+    # Helper to collect inconsistent rows
+    def collect(mask, label):
+        nonlocal inconsistent_rows
+        inconsistencies[label] = mask.sum()
+        temp = customer_info[mask].copy()
+        temp['inconsistency'] = label
+        inconsistent_rows = pd.concat([inconsistent_rows, temp])
+
+    # 1. Negative kids_home
+    mask = (customer_info['kids_home'] < 0).fillna(False)
+    collect(mask, "Negative kids_home")
+
+    # 2. Negative teens_home
+    mask = (customer_info['teens_home'] < 0).fillna(False)
+    collect(mask, "Negative teens_home")
+
+    # 3. Negative number_complaints
+    mask = (customer_info['number_complaints'] < 0).fillna(False)
+    collect(mask, "Negative number_complaints")
+
+    # 4. Negative distinct_stores_visited
+    mask = (customer_info['distinct_stores_visited'] < 0).fillna(False)
+    collect(mask, "Negative distinct_stores_visited")
+
+    # 5. lifetime_total_distinct_products issues
+    mask = (
+        (customer_info['lifetime_total_distinct_products'] <= 0).fillna(False) |
+        (customer_info['distinct_products_sum'] > customer_info['lifetime_total_distinct_products']).fillna(False)
+    )
+    collect(mask, "Problem with lifetime_total_distinct_products")
+
+    # 6. Year of first transaction > 2025
+    mask = (customer_info['year_first_transaction'] > 2025).fillna(False)
+    collect(mask, "Year of first transaction > 2025")
+
+    # 7. Percentage of products bought promotion < 0 or > 1
+    mask = (
+        (customer_info['percentage_of_products_bought_promotion'] < 0) |
+        (customer_info['percentage_of_products_bought_promotion'] > 1)
+    ).fillna(False)
+    collect(mask, "Percentage of products bought promotion < 0 or > 1")
+
+    # 8. Negative lifetime spend values
+    spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
+    for col in spend_cols:
+        col_mask = (customer_info[col] < 0).fillna(False)
+        collect(col_mask, f"Negative value in {col}")
+
+    display(inconsistent_rows)
+
+def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
+    for index, row in customer_info.iterrows():
+
+        if row['kids_home'] < 0:
+            customer_info.loc[index, 'kids_home'] *= -1
+        if row['teens_home'] < 0:
+            customer_info.loc[index, 'teens_home'] *= -1
+
+        if row['number_complaints'] < 0:
+            customer_info.loc[index, 'number_complaints'] = 0
+
+        if row['distinct_stores_visited'] < 0:
+            customer_info.loc[index, 'distinct_stores_visited'] *= -1
+
+        if row['year_first_transaction'] > 2025:
+            customer_info.loc[index, 'year_first_transaction'] = 2025
+
+        if row['lifetime_total_distinct_products'] < 0:
+            customer_info.loc[index, 'lifetime_total_distinct_products'] *= -1
+        elif row['lifetime_total_distinct_products'] == 0:
+            customer_info.loc[index, 'lifetime_total_distinct_products'] = 1
+
+        if row['distinct_products_sum'] > row['lifetime_total_distinct_products']:
+            customer_info.loc[index, 'lifetime_total_distinct_products'] = row['distinct_products_sum']
+
+        if row['percentage_of_products_bought_promotion'] < 0:
+            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 0
+        elif row['percentage_of_products_bought_promotion'] > 1:
+            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 1
+
+        for col in customer_info.columns:
+            if col.startswith('lifetime_spend_'):
+                if row[col] < 0:
+                    customer_info.loc[index, col] *= -1
+
+    return customer_info
 
 #######################################
 ############### OUTLIERS ##############
@@ -374,21 +484,21 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
-def winsorization(reference_df, apply_to_df):
+def treat_outliers_winsorization(data: pd.DataFrame) -> pd.DataFrame:
     for col in ["lifetime_spend_groceries", "lifetime_spend_electronics", "lifetime_spend_vegetables", "lifetime_spend_nonalcohol_drinks", "lifetime_spend_alcohol_drinks", "lifetime_spend_meat", "lifetime_spend_fish", "lifetime_spend_hygiene", "lifetime_spend_videogames", "lifetime_spend_petfood"]:
 
-        Q1 = reference_df[col].quantile(0.25)
-        Q3 = reference_df[col].quantile(0.75)
+        Q1 = data[col].quantile(0.25)
+        Q3 = data[col].quantile(0.75)
     
         IQR = Q3 - Q1
     
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
     
-        apply_to_df.loc[apply_to_df[col] < lower_bound, col] = lower_bound
-        apply_to_df.loc[apply_to_df[col] > upper_bound, col] = upper_bound
+        data.loc[data[col] < lower_bound, col] = lower_bound
+        data.loc[data[col] > upper_bound, col] = upper_bound
 
-    return apply_to_df
+    return data
 
 ## Multi Dimensional Outliers --> DBSCAN
 
@@ -422,220 +532,6 @@ def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samp
     customer_info.drop(columns=['cluster_dbscan', 'is_outlier_dbscan'], inplace=True)
 
     return customer_info
-
-# SOM
-def check_multidimensional_outliers_som(data_np: np.ndarray, 
-                                        x: int, 
-                                        y: int, 
-                                        input_len: int, 
-                                        sigma: float = 0.5,
-                                        learning_rate: float = 1,
-                                        neighborhood_function: str ='gaussian', 
-                                        random_seed: int = 42,
-                                        number_of_iterations: int = 1000) -> MiniSom:
-    """
-    Train a Self-Organizing Map (SOM) using the given data.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
-        x (int): The number of rows in the SOM grid.
-        y (int): The number of columns in the SOM grid.
-        input_len (int): The number of features in the input data.
-        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
-        learning_rate (float, optional): The initial learning rate. Default is 0.5.
-        random_seed (int, optional): The seed for random number generation. Default is None.
-        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
-
-    Returns:
-        MiniSom: The trained SOM model.
-    """
-    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
-    #som.random_weights_init(data)
-    #som.train_random(data, num_iteration=number_of_iterations)
-    som.train_batch(data_np, number_of_iterations)
-    return som
-
-def som_mean_clusters(data, col):
-    """
-    Calculate the mean of a specified column grouped by SOM winner nodes.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        col (str): The column name for which the mean is calculated.
-
-    Returns:
-        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
-    """
-    grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
-    return grouped
-
-def visualize_data_points_grid(data, scaled_data, som_model, color_variable, color_dict):
-    """
-    Visualize data points on a SOM grid with a distance map in the background.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        scaled_data (np.ndarray): The scaled data used for SOM training.
-        som_model (minisom.MiniSom): The trained SOM model.
-        color_variable (str): The column name used for coloring data points.
-        color_dict (dict): A dictionary mapping unique values in the color_variable to colors.
-
-    Returns:
-        None: Displays a scatter plot with the SOM grid.
-    """
-    target = data[color_variable]
-    fig, ax = plt.subplots()
-
-    # Get weights for SOM winners
-    w_x, w_y = zip(*[som_model.winner(d) for d in scaled_data])
-    w_x = np.array(w_x)
-    w_y = np.array(w_y)
-
-    # Plot distance map in the background
-    plt.pcolor(som_model.distance_map().T, cmap='bone_r', alpha=.2)
-    plt.colorbar()
-
-    # Plot data points with random perturbation to avoid overlap
-    for c in np.unique(target):
-        idx_target = target == c
-        plt.scatter(
-            w_x[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            w_y[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            s=50, c=color_dict[c], label=c
-        )
-
-    ax.legend(bbox_to_anchor=(1.2, 1.05))
-    plt.grid()
-    plt.show()
-
-def plot_feature_influence(trained_som, data):
-    """
-    Plot the influence of each feature on the SOM nodes.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        data (pd.DataFrame): The input DataFrame containing the data.
-
-    Returns:
-        None: Displays a grid of plots showing feature influence.
-    """
-    feature_names = data.columns
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(15, 15))
-    for i, f in enumerate(feature_names):
-        plt.subplot(5, 5, i + 1)
-        plt.title(f)
-        plt.pcolor(W[:, :, i].T, cmap='coolwarm')
-        plt.xticks(np.arange(10 + 1))
-        plt.yticks(np.arange(10 + 1))
-    plt.tight_layout()
-    plt.show()
-
-def plot_most_important_variable(trained_som, features):
-    """
-    Plot the most important variable for each SOM unit.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        features (list): List of feature names used in SOM training.
-
-    Returns:
-        None: Displays a plot showing the most important variable for each SOM unit.
-    """
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(8, 8))
-    for i in np.arange(W.shape[0]):
-        for j in np.arange(W.shape[1]):
-            feature = np.argmax(W[i, j, :])
-            plt.plot([i + .5], [j + .5], 'o', color='C' + str(feature),
-                     marker='s', markersize=24)
-
-    legend_elements = [
-        Patch(facecolor='C' + str(i), edgecolor='w', label=f) for i, f in enumerate(features)
-    ]
-
-    plt.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, .95))
-    plt.xlim([0, 15])
-    plt.ylim([0, 15])
-    plt.show()
-
-def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes outliers from the customer information DataFrame based on predefined conditions.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        The input DataFrame containing customer information, including various columns.
-
-    Returns:
-    --------
-    pd.DataFrame
-        A filtered DataFrame containing only rows that satisfy the outlier conditions.
-    """
-    outlier_conditions = (
-        (customer_info['kids_home'] <= 8) &
-        (customer_info['teens_home'] <= 4) &
-        (customer_info['number_complaints'] <= 4) &
-        (customer_info['distinct_stores_visited'] <= 8) &
-        (customer_info['lifetime_spend_groceries'] <= 100000) &
-        (customer_info['lifetime_spend_electronics'] <= 20000) &
-        (customer_info['lifetime_spend_vegetables'] <= 2600) &
-        (customer_info['lifetime_spend_nonalcohol_drinks'] <= 1400) &
-        (customer_info['lifetime_spend_alcohol_drinks'] <= 2800) &
-        (customer_info['lifetime_spend_meat'] <= 2600) &
-        (customer_info['lifetime_spend_fish'] <= 2800) &
-        (customer_info['lifetime_spend_hygiene'] <= 2400) &
-        (customer_info['lifetime_spend_videogames'] <= 1700) &
-        (customer_info['lifetime_spend_petfood'] <= 850) &
-        (customer_info['lifetime_total_distinct_products'] <= 600) &
-        (customer_info['percentage_of_products_bought_promotion'] >= -0.5) &
-        (customer_info['percentage_of_products_bought_promotion'] <= 1.5)
-    )
-    return customer_info[outlier_conditions]
-
-# Elbow method
-
-def elbow_method(X, k_range=range(1, 11), plot=True, random_state=42):
-    """
-    Performs the Elbow Method to help choose the optimal number of clusters for K-Means.
-    
-    Parameters:
-    - X (np.ndarray or pd.DataFrame): Input data.
-    - k_range (iterable): Range of K values to try (default: 1 to 10).
-    - scale_data (bool): Whether to scale the data using StandardScaler (recommended).
-    - plot (bool): Whether to display the elbow plot.
-    - random_state (int): Random seed for reproducibility.
-    
-    Returns:
-    - distortions (list): Sum of squared distances for each K.
-    """
-    
-    distortions = []
-    
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, 
-                        n_init=10, 
-                        max_iter=300, 
-                        random_state=random_state,
-                        algorithm='elkan')  # faster for dense data
-        kmeans.fit(X)
-        distortions.append(kmeans.inertia_)  # Sum of squared distances to closest cluster center
-    
-    if plot:
-        plt.figure(figsize=(8, 5))
-        plt.plot(list(k_range), distortions, marker='o')
-        plt.xlabel('Number of clusters (K)')
-        plt.ylabel('Inertia (Sum of Squared Distances)')
-        plt.title('Elbow Method For Optimal K')
-        plt.xticks(list(k_range))
-        plt.grid(True)
-        plt.show()
-    
-    return distortions
-
 
 #######################################
 ############ MISSING VALUES ###########
@@ -791,7 +687,6 @@ def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFr
 
     return imputed_data
 
-# Note: we can not impute either in loyalty card number or customer birthdate.
 
 #######################################
 ############## ENCODING ###############
@@ -815,139 +710,13 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
                       - 'gender': Binary representation of gender.
                       - All other columns from the original DataFrame except the dropped ones.
     """
-    # 1
-    customer_info.drop(['customer_name', 'customer_birthdate'], axis = 1, inplace = True)
 
-    # 2
     education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 15, 'Msc': 17, 'Phd': 20}
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
-    # 4
     customer_info.drop(['education_level'], axis = 1, inplace = True)
 
     return customer_info
-
-#######################################
-########### INCONSISTENCIES ###########
-#######################################
-
-
-# age and education
-# - 9 <= Age : '4th'            
-# - 11 <= Age: '6th'       
-# - 14 <= Age: '9th'
-# - 17 <= Age: 'Hs' (High School)   
-# - 21 <= Age: 'Bsc'    
-# - 23 <= Age: 'Msc'
-# - 26 <= Age: 'Phd'
-
-# people that live more than 1km from the coast (Latitude should be between -90 and +90 and Longitude should be between -180 and +180)
-# "Latitude out of range": (~customer_info['latitude'].between(-90, 90, inclusive='both')).sum(),
-# "Longitude out of range": (~customer_info['longitude'].between(-180, 180, inclusive='both')).sum(),
-
-def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFrame):
-    """
-    Counts the number of occurrences for each inconsistency in customer_info,
-    and returns the inconsistent rows in a new DataFrame with a column indicating the inconsistency.
-
-    Args:
-        customer_info (pd.DataFrame): The input DataFrame.
-
-    Returns:
-        Tuple[pd.Series, pd.DataFrame]: 
-            - A series where the index is the inconsistency description and the value is the count.
-            - A DataFrame containing the rows with inconsistencies and a column 'inconsistency' describing the issue.
-    """
-    inconsistencies = {}
-    inconsistent_rows = pd.DataFrame()
-
-    # Helper to collect inconsistent rows
-    def collect(mask, label):
-        nonlocal inconsistent_rows
-        inconsistencies[label] = mask.sum()
-        temp = customer_info[mask].copy()
-        temp['inconsistency'] = label
-        inconsistent_rows = pd.concat([inconsistent_rows, temp])
-
-    # 1. Negative kids_home
-    mask = (customer_info['kids_home'] < 0).fillna(False)
-    collect(mask, "Negative kids_home")
-
-    # 2. Negative teens_home
-    mask = (customer_info['teens_home'] < 0).fillna(False)
-    collect(mask, "Negative teens_home")
-
-    # 3. Negative number_complaints
-    mask = (customer_info['number_complaints'] < 0).fillna(False)
-    collect(mask, "Negative number_complaints")
-
-    # 4. Negative distinct_stores_visited
-    mask = (customer_info['distinct_stores_visited'] < 0).fillna(False)
-    collect(mask, "Negative distinct_stores_visited")
-
-    # 5. lifetime_total_distinct_products issues
-    mask = (
-        (customer_info['lifetime_total_distinct_products'] <= 0).fillna(False) |
-        (customer_info['distinct_products_sum'] > customer_info['lifetime_total_distinct_products']).fillna(False)
-    )
-    collect(mask, "Problem with lifetime_total_distinct_products")
-
-    # 6. Year of first transaction > 2025
-    mask = (customer_info['year_first_transaction'] > 2025).fillna(False)
-    collect(mask, "Year of first transaction > 2025")
-
-    # 7. Percentage of products bought promotion < 0 or > 1
-    mask = (
-        (customer_info['percentage_of_products_bought_promotion'] < 0) |
-        (customer_info['percentage_of_products_bought_promotion'] > 1)
-    ).fillna(False)
-    collect(mask, "Percentage of products bought promotion < 0 or > 1")
-
-    # 8. Negative lifetime spend values
-    spend_cols = [col for col in customer_info.columns if col.startswith('lifetime_spend_')]
-    for col in spend_cols:
-        col_mask = (customer_info[col] < 0).fillna(False)
-        collect(col_mask, f"Negative value in {col}")
-
-    display(inconsistent_rows)
-
-def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
-    for index, row in customer_info.iterrows():
-
-        if row['kids_home'] < 0:
-            customer_info.loc[index, 'kids_home'] *= -1
-        if row['teens_home'] < 0:
-            customer_info.loc[index, 'teens_home'] *= -1
-
-        if row['number_complaints'] < 0:
-            customer_info.loc[index, 'number_complaints'] = 0
-
-        if row['distinct_stores_visited'] < 0:
-            customer_info.loc[index, 'distinct_stores_visited'] *= -1
-
-        if row['year_first_transaction'] > 2025:
-            customer_info.loc[index, 'year_first_transaction'] = 2025
-
-        if row['lifetime_total_distinct_products'] < 0:
-            customer_info.loc[index, 'lifetime_total_distinct_products'] *= -1
-        elif row['lifetime_total_distinct_products'] == 0:
-            customer_info.loc[index, 'lifetime_total_distinct_products'] = 1
-
-        if row['distinct_products_sum'] > row['lifetime_total_distinct_products']:
-            customer_info.loc[index, 'lifetime_total_distinct_products'] = row['distinct_products_sum']
-
-        if row['percentage_of_products_bought_promotion'] < 0:
-            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 0
-        elif row['percentage_of_products_bought_promotion'] > 1:
-            customer_info.loc[index, 'percentage_of_products_bought_promotion'] = 1
-
-        for col in customer_info.columns:
-            if col.startswith('lifetime_spend_'):
-                if row[col] < 0:
-                    customer_info.loc[index, col] *= -1
-
-    return customer_info
-
 
 #######################################
 ############### SCALING ###############
@@ -986,21 +755,24 @@ def scaling(data: pd.DataFrame) -> pd.DataFrame:
 #######################################
 
 def correlation_matrix(customer_info: pd.DataFrame) -> list:
-
     """
     Generates an interactive correlation matrix heatmap using Plotly and identifies strongly correlated pairs.
+    Only the lower triangle (excluding the diagonal) is shown for clarity.
 
     Args:
         customer_info (pd.DataFrame): The input DataFrame containing numerical data.
-        threshold (float): The correlation threshold to highlight strong correlations.
 
     Returns:
         list: A list of tuples containing pairs of columns with correlation above the threshold.
     """
     corr = customer_info.corr()
 
+    # Mask upper triangle
+    mask = np.triu(np.ones_like(corr, dtype=bool))
+    corr_masked = corr.mask(mask)
+
     fig = go.Figure(data=go.Heatmap(
-        z=corr.values,
+        z=corr_masked.values,
         x=corr.columns,
         y=corr.columns,
         colorscale='rdylbu',
@@ -1009,7 +781,7 @@ def correlation_matrix(customer_info: pd.DataFrame) -> list:
     ))
 
     fig.update_layout(
-        title="Correlation Matrix",
+        title="Correlation Matrix (Lower Triangle)",
         xaxis=dict(tickangle=45),
         yaxis=dict(tickangle=0),
         autosize=True,
@@ -1022,6 +794,146 @@ def correlation_matrix(customer_info: pd.DataFrame) -> list:
 #######################################
 ########## FEATURE SELECTION ##########
 #######################################
+
+# SOM
+def som(data_np: np.ndarray, 
+                                        x: int, 
+                                        y: int, 
+                                        input_len: int, 
+                                        sigma: float = 0.5,
+                                        learning_rate: float = 1,
+                                        neighborhood_function: str ='gaussian', 
+                                        random_seed: int = 42,
+                                        number_of_iterations: int = 1000) -> MiniSom:
+    """
+    Train a Self-Organizing Map (SOM) using the given data.
+
+    Args:
+        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
+        x (int): The number of rows in the SOM grid.
+        y (int): The number of columns in the SOM grid.
+        input_len (int): The number of features in the input data.
+        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
+        learning_rate (float, optional): The initial learning rate. Default is 0.5.
+        random_seed (int, optional): The seed for random number generation. Default is None.
+        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
+
+    Returns:
+        MiniSom: The trained SOM model.
+    """
+    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
+    #som.random_weights_init(data)
+    #som.train_random(data, num_iteration=number_of_iterations)
+    som.train_batch(data_np, number_of_iterations)
+    return som
+
+def som_mean_clusters(data, col):
+    """
+    Calculate the mean of a specified column grouped by SOM winner nodes.
+
+    Args:
+        data (pd.DataFrame): The input DataFrame containing the data.
+        col (str): The column name for which the mean is calculated.
+
+    Returns:
+        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
+    """
+    grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
+    return grouped
+
+'''
+def visualize_data_points_grid(data, scaled_data, som_model, color_variable, color_dict):
+    """
+    Visualize data points on a SOM grid with a distance map in the background.
+
+    Args:
+        data (pd.DataFrame): The input DataFrame containing the data.
+        scaled_data (np.ndarray): The scaled data used for SOM training.
+        som_model (minisom.MiniSom): The trained SOM model.
+        color_variable (str): The column name used for coloring data points.
+        color_dict (dict): A dictionary mapping unique values in the color_variable to colors.
+
+    Returns:
+        None: Displays a scatter plot with the SOM grid.
+    """
+    target = data[color_variable]
+    fig, ax = plt.subplots()
+
+    # Get weights for SOM winners
+    w_x, w_y = zip(*[som_model.winner(d) for d in scaled_data])
+    w_x = np.array(w_x)
+    w_y = np.array(w_y)
+
+    # Plot distance map in the background
+    plt.pcolor(som_model.distance_map().T, cmap='bone_r', alpha=.2)
+    plt.colorbar()
+
+    # Plot data points with random perturbation to avoid overlap
+    for c in np.unique(target):
+        idx_target = target == c
+        plt.scatter(
+            w_x[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
+            w_y[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
+            s=50, c=color_dict[c], label=c
+        )
+
+    ax.legend(bbox_to_anchor=(1.2, 1.05))
+    plt.grid()
+    plt.show()
+'''
+def plot_feature_influence(trained_som, data):
+    """
+    Plot the influence of each feature on the SOM nodes.
+
+    Args:
+        trained_som (minisom.MiniSom): The trained SOM model.
+        data (pd.DataFrame): The input DataFrame containing the data.
+
+    Returns:
+        None: Displays a grid of plots showing feature influence.
+    """
+    feature_names = data.columns
+    W = trained_som.get_weights()
+
+    plt.figure(figsize=(15, 15))
+    for i, f in enumerate(feature_names):
+        plt.subplot(5, 5, i + 1)
+        plt.title(f)
+        plt.pcolor(W[:, :, i].T, cmap='coolwarm')
+        plt.xticks(np.arange(10 + 1))
+        plt.yticks(np.arange(10 + 1))
+    plt.tight_layout()
+    plt.show()
+
+def plot_most_important_variable(trained_som, features):
+    """
+    Plot the most important variable for each SOM unit.
+
+    Args:
+        trained_som (minisom.MiniSom): The trained SOM model.
+        features (list): List of feature names used in SOM training.
+
+    Returns:
+        None: Displays a plot showing the most important variable for each SOM unit.
+    """
+    W = trained_som.get_weights()
+
+    plt.figure(figsize=(8, 8))
+    for i in np.arange(W.shape[0]):
+        for j in np.arange(W.shape[1]):
+            feature = np.argmax(W[i, j, :])
+            plt.plot([i + .5], [j + .5], 'o', color='C' + str(feature),
+                     marker='s', markersize=24)
+
+    legend_elements = [
+        Patch(facecolor='C' + str(i), edgecolor='w', label=f) for i, f in enumerate(features)
+    ]
+
+    plt.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, .95))
+    plt.xlim([0, 15])
+    plt.ylim([0, 15])
+    plt.show()
+
 
 
 def feature_selection_with_clustering(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
