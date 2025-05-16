@@ -12,7 +12,7 @@ from minisom import MiniSom
 import seaborn as sns
 from scipy.cluster.hierarchy import linkage, fcluster
 import matplotlib.pyplot as plt
-
+from sklearn.decomposition import PCA
 #######################################
 ######### GENERAL EXPLORATION #########
 #######################################
@@ -462,6 +462,7 @@ def check_multidimensional_outliers_som(data_np: np.ndarray,
     #som.random_weights_init(data)
     #som.train_random(data, num_iteration=number_of_iterations)
     som.train_batch(data_np, number_of_iterations)
+    return som
 
 def som_mean_clusters(data, col):
     """
@@ -1067,3 +1068,8 @@ def feature_selection(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
     data = data.loc[:, feature_importance.columns]
 
     return data
+
+def pca(data: pd.DataFrame, num_components: int = None) -> PCA:
+    pca = PCA(num_components=25)
+    pca.fit(data)
+    return pca
