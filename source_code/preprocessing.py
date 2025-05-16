@@ -11,6 +11,8 @@ from sklearn.ensemble import IsolationForest
 from minisom import MiniSom
 import seaborn as sns
 from scipy.cluster.hierarchy import linkage, fcluster
+import shap
+from sklearn.ensemble import RandomForestClassifier
 import matplotlib.pyplot as plt
 
 #######################################
@@ -818,6 +820,30 @@ def feature_selection_with_clustering(data: pd.DataFrame, n_clusters: int = 7) -
     hierarchical_labels = fcluster(linkage_matrix, t=n_clusters, criterion='maxclust')
     hierarchical_importance = pd.Series(hierarchical_labels).value_counts(normalize=True) < 0.5
     feature_importance['Hierarchical'] = [hierarchical_importance[label] for label in hierarchical_labels]
+
+    # SHAP (SHapley Additive exPlanations)
+
+    # Fit a simple model for SHAP (using RandomForestClassifier as an example)
+    # For demonstration, create a dummy target if not present
+    if 'target' in data.columns:
+        X = data.drop(columns=['target'])
+        y = data['target']
+    else:
+        X = data
+        y = np.random.randint(0, 2, size=len(data))
+
+    model = RandomForestClassifier(n_estimators=50, random_state=42)
+    model.fit(X, y)
+
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X)
+    if isinstance(shap_values, list):  # For multiclass, take mean over classes
+        shap_importance = np.mean(np.abs(shap_values), axis=0).mean(axis=0)
+    else:
+        shap_importance = np.abs(shap_values).mean(axis=0)
+
+    feature_importance['SHAP'] = pd.Series(shap_importance, index=X.columns) > shap_importance.mean()
+    feature_importance['SHAP_rank'] = pd.Series(shap_importance, index=X.columns).rank(ascending=False)
 
     return feature_importance
 
