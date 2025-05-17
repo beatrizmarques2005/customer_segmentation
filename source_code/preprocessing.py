@@ -107,6 +107,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
     customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
     customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
+    customer_info.drop(['customer_name'], axis=1, inplace=True)
 
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
@@ -487,21 +488,56 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
     fig.show()
 
 def treat_outliers_winsorization(data: pd.DataFrame) -> pd.DataFrame:
-    for col in ["lifetime_spend_groceries", "lifetime_spend_electronics", "lifetime_spend_vegetables", "lifetime_spend_nonalcohol_drinks", "lifetime_spend_alcohol_drinks", "lifetime_spend_meat", "lifetime_spend_fish", "lifetime_spend_hygiene", "lifetime_spend_videogames", "lifetime_spend_petfood"]:
-
+    total_count = 0
+    for col in [
+        "lifetime_spend_groceries", "lifetime_spend_electronics", "lifetime_spend_vegetables",
+        "lifetime_spend_nonalcohol_drinks", "lifetime_spend_alcohol_drinks", "lifetime_spend_meat",
+        "lifetime_spend_fish", "lifetime_spend_hygiene", "lifetime_spend_videogames", "lifetime_spend_petfood"
+    ]:
         Q1 = data[col].quantile(0.25)
         Q3 = data[col].quantile(0.75)
-    
         IQR = Q3 - Q1
-    
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
-    
-        data.loc[data[col] < lower_bound, col] = lower_bound
-        data.loc[data[col] > upper_bound, col] = upper_bound
 
+        lower_mask = data[col] < lower_bound
+        upper_mask = data[col] > upper_bound
+        lower_count = lower_mask.sum()
+        upper_count = upper_mask.sum()
+        data.loc[lower_mask, col] = lower_bound
+        data.loc[upper_mask, col] = upper_bound
+        print(f"{col}: {lower_count} values set to lower bound, {upper_count} values set to upper bound")
+        total_count += lower_count + upper_count
+    print(total_count, "values have been treated with winsorization")
     return data
 
+def erase_outliers(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove rows considered outliers based on predefined upper thresholds for specific columns.
+    Returns a DataFrame with outliers removed.
+    """
+    thresholds = {
+        'kids_home': 8,
+        'teens_home': 4,
+        'number_complaints': 4,
+        'distinct_stores_visited': 8,
+        'lifetime_spend_groceries': 130000,
+        'lifetime_spend_electronics': 30000,
+        'lifetime_spend_vegetables': 3600,
+        'lifetime_spend_nonalcohol_drinks': 1700,
+        'lifetime_spend_alcohol_drinks': 4000,
+        'lifetime_spend_meat': 3000,
+        'lifetime_spend_fish': 3800,
+        'lifetime_spend_hygiene': 3000,
+        'lifetime_spend_videogames': 2100,
+        'lifetime_spend_petfood': 950,
+        'lifetime_total_distinct_products': 800
+    }
+    mask = pd.Series(True, index=data.index)
+    for col, max_val in thresholds.items():
+        if col in data.columns:
+            mask &= (data[col] <= max_val)
+    return data[mask].reset_index(drop=True)
 ## Multi Dimensional Outliers --> DBSCAN
 
 def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> None:
