@@ -107,7 +107,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
     customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
     customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
-    customer_info.drop(['customer_name'], axis=1, inplace=True)
+
 
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
@@ -131,11 +131,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     )
 
     # 4
-    if 'customer_gender' in customer_info.columns:
-        customer_info.drop(columns=['customer_gender'], inplace=True)
-
-    # 5
-    customer_info.drop(['customer_name', 'customer_birthdate', 'loyalty_card_number'], axis = 1, inplace = True)
+    customer_info.drop(['customer_name', 'customer_gender', 'customer_birthdate', 'loyalty_card_number'], axis=1, inplace=True)
 
     return customer_info
 
@@ -281,6 +277,14 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
         col_mask = (customer_info[col] < 0).fillna(False)
         collect(col_mask, f"Negative value in {col}")
 
+    # 9. Age VS year of first transaction (age at first transaction should be >= 0)
+    mask = (
+        (customer_info['age'].notna()) &
+        (customer_info['year_first_transaction'].notna()) &
+        ((customer_info['age'] - (2025 - customer_info['year_first_transaction'])) < 18)
+    )
+    collect(mask, "Age at first transaction < 0")
+
     display(inconsistent_rows)
 
 def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
@@ -317,6 +321,13 @@ def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
             if col.startswith('lifetime_spend_'):
                 if row[col] < 0:
                     customer_info.loc[index, col] *= -1
+
+        if (
+            pd.notna(row['age']) and
+            pd.notna(row['year_first_transaction']) and
+            (row['age'] - (2025 - row['year_first_transaction'])) < 18
+        ):
+            customer_info.loc[index, 'year_first_transaction'] = 2025
 
     return customer_info
 
@@ -487,57 +498,35 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
-def treat_outliers_winsorization(data: pd.DataFrame) -> pd.DataFrame:
-    total_count = 0
-    for col in [
-        "lifetime_spend_groceries", "lifetime_spend_electronics", "lifetime_spend_vegetables",
-        "lifetime_spend_nonalcohol_drinks", "lifetime_spend_alcohol_drinks", "lifetime_spend_meat",
-        "lifetime_spend_fish", "lifetime_spend_hygiene", "lifetime_spend_videogames", "lifetime_spend_petfood"
-    ]:
-        Q1 = data[col].quantile(0.25)
-        Q3 = data[col].quantile(0.75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
-
-        lower_mask = data[col] < lower_bound
-        upper_mask = data[col] > upper_bound
-        lower_count = lower_mask.sum()
-        upper_count = upper_mask.sum()
-        data.loc[lower_mask, col] = lower_bound
-        data.loc[upper_mask, col] = upper_bound
-        print(f"{col}: {lower_count} values set to lower bound, {upper_count} values set to upper bound")
-        total_count += lower_count + upper_count
-    print(total_count, "values have been treated with winsorization")
-    return data
-
-def erase_outliers(data: pd.DataFrame) -> pd.DataFrame:
+def treat_outliers(data: pd.DataFrame) -> pd.DataFrame:
     """
     Remove rows considered outliers based on predefined upper thresholds for specific columns.
     Returns a DataFrame with outliers removed.
     """
     thresholds = {
         'kids_home': 8,
-        'teens_home': 4,
-        'number_complaints': 4,
+        'teens_home': 3,
+        'number_complaints': 3,
         'distinct_stores_visited': 8,
-        'lifetime_spend_groceries': 130000,
-        'lifetime_spend_electronics': 30000,
-        'lifetime_spend_vegetables': 3600,
-        'lifetime_spend_nonalcohol_drinks': 1700,
-        'lifetime_spend_alcohol_drinks': 4000,
-        'lifetime_spend_meat': 3000,
-        'lifetime_spend_fish': 3800,
-        'lifetime_spend_hygiene': 3000,
-        'lifetime_spend_videogames': 2100,
-        'lifetime_spend_petfood': 950,
-        'lifetime_total_distinct_products': 800
+        'lifetime_spend_groceries': 100000,
+        'lifetime_spend_electronics': 17000, # ?24000
+        'lifetime_spend_vegetables': 2500, # 3000
+        'lifetime_spend_nonalcohol_drinks': 1500,
+        'lifetime_spend_alcohol_drinks': 2500, # 3000
+        'lifetime_spend_meat': 2600,
+        'lifetime_spend_fish': 3200,
+        'lifetime_spend_hygiene': 2800,
+        'lifetime_spend_videogames': 1600, # 1900
+        'lifetime_spend_petfood': 900,
+        'lifetime_total_distinct_products': 600
     }
+
     mask = pd.Series(True, index=data.index)
     for col, max_val in thresholds.items():
         if col in data.columns:
-            mask &= (data[col] <= max_val)
+            mask &= (data[col].isna() | (data[col] <= max_val))
     return data[mask].reset_index(drop=True)
+
 ## Multi Dimensional Outliers --> DBSCAN
 
 def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> None:
@@ -555,11 +544,12 @@ def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: in
     for eps in np.arange(*eps_range):
         
         print('=====================================')
+
         ci_dbscan = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
         cluster_comparison = ci_dbscan.groupby(['cluster_dbscan', 'is_outlier_dbscan']).size().reset_index(name='number_of_customers')
 
-        num_clusters = cluster_comparison[cluster_comparison['is_outlier_dbscan'] == 0]['cluster_dbscan'].nunique()
-        total_outliers = cluster_comparison[cluster_comparison["is_outlier_dbscan"] == 1]["number_of_customers"].sum()
+        num_clusters = cluster_comparison[cluster_comparison['is_outlier_dbscan'] == False]['cluster_dbscan'].nunique()
+        total_outliers = cluster_comparison[cluster_comparison["is_outlier_dbscan"] == True]["number_of_customers"].sum()
 
         print(f"With eps = {eps}\n\tNumber of clusters (not outliers): {num_clusters}\n\tTotal number of outliers: {total_outliers}")
 
@@ -574,23 +564,6 @@ def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samp
 #######################################
 ############ MISSING VALUES ###########
 #######################################
-
-'''
-def impute_loyalty_card(customer_info:pd.DataFrame) -> pd.DataFrame:
-    """
-    Imputes missing values in the 'loyalty_card_number' column of the customer_info DataFrame with 0.
-
-    Parameters:
-    customer_info (pd.DataFrame): A pandas DataFrame containing customer information, 
-                                  including a 'loyalty_card_number' column.
-
-    Returns:
-    pd.DataFrame: The updated DataFrame with missing values in 'loyalty_card_number' replaced by 0.
-    """
-    customer_info['loyalty_card_number'].fillna(0, inplace=True)
-
-    return customer_info
-    '''
 
 def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
@@ -683,7 +656,6 @@ def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The DataFrame with missing values imputed.
     """
-    #customer_info = impute_loyalty_card(customer_info)
     customer_info = impute_kids_teens_home(customer_info)
     customer_info = impute_lifetime_spend_alcohol_drinks(customer_info)
     customer_info = impute_education_level(customer_info)
@@ -789,7 +761,6 @@ def scaling(data: pd.DataFrame) -> pd.DataFrame:
  
     return scaled_data
 
-
 #######################################
 ############# REDUNDANCY ##############
 #######################################
@@ -830,6 +801,12 @@ def correlation_matrix(customer_info: pd.DataFrame) -> list:
     )
 
     fig.show()
+
+def treat_redundancy(data: pd.DataFrame, cols: list) -> pd.DataFrame:
+
+    data.drop(cols, axis = 1, inplace = True)
+
+    return data
 
 #######################################
 ########## FEATURE SELECTION ##########
@@ -974,8 +951,6 @@ def plot_most_important_variable(trained_som, features):
     plt.ylim([0, 15])
     plt.show()
 
-
-
 def feature_selection_with_clustering(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
     feature_importance = pd.DataFrame(index=data.columns)
 
@@ -1040,3 +1015,6 @@ def pca(data: pd.DataFrame, num_components: int = None) -> PCA:
     pca = PCA(num_components=25)
     pca.fit(data)
     return pca
+
+
+
