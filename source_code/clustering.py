@@ -4,21 +4,32 @@ import pandas as pd
 from sklearn.cluster import estimate_bandwidth
 from scipy.cluster.hierarchy import dendrogram
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
-
+import plotly.graph_objects as go
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
-    summary = data.groupby(cluster_col).mean().T
 
-    plt.figure(figsize=(10, min(1 + 0.5 * summary.shape[0], 12)))
-    sns.heatmap(summary, annot=True, fmt=".2f", cmap="viridis")
-    plt.title("Cluster Feature Means")
-    plt.ylabel("Features")
-    plt.xlabel("Cluster")
-    plt.tight_layout()
-    plt.show()
+    summary = data.groupby(cluster_col).mean(numeric_only=True).T
 
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=summary.values,
+            x=summary.columns.astype(str),
+            y=summary.index,
+            colorscale="viridis",
+            colorbar=dict(title="Mean"),
+            text=np.round(summary.values, 2),
+            texttemplate="%{text}"
+        )
+    )
+    fig.update_layout(
+        title="Cluster Feature Means",
+        xaxis_title="Cluster",
+        yaxis_title="Features",
+        autosize=True,
+        margin=dict(l=40, r=40, t=60, b=40)
+    )
+    fig.show()
     return summary
 
 #######################################
@@ -73,6 +84,31 @@ def kmeans_clustering(data: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
 
     return data
 
+def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
+    inertia = []
+    for k in range(1, max_k + 1):
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        kmeans.fit(data)
+        inertia.append(kmeans.inertia_)
+        
+    fig = go.Figure(
+        data=go.Scatter(
+            x=list(range(1, max_k + 1)),
+            y=inertia,
+            mode='lines+markers',
+            marker=dict(size=8),
+            hovertemplate='K=%{x}<br>Inertia=%{y:.2f}<extra></extra>'
+        )
+    )
+    fig.update_layout(
+        title="Elbow Method",
+        xaxis_title="Number of Clusters (K)",
+        yaxis_title="Inertia",
+        xaxis=dict(dtick=1),
+        template="plotly_white"
+    )
+    fig.show()
+
 #######################################
 ################ SOM ##################
 #######################################
@@ -104,6 +140,41 @@ def dbscan_clustering(data, eps: float, min_samples: int) -> pd.DataFrame:
     data['cluster'] = model.fit_predict(data)
 
     return data
+
+def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_values: list) -> None:
+    """
+    Plots the number of clusters found by DBSCAN as a function of eps.
+
+    Args:
+        data (pd.DataFrame): The input data for clustering.
+        min_samples (int): The min_samples parameter for DBSCAN.
+        eps_values (list): List of eps values to try.
+    """
+    n_clusters_list = []
+    for eps in eps_values:
+        model = DBSCAN(eps=eps, min_samples=min_samples)
+        labels = model.fit_predict(data)
+        # Exclude noise label (-1) from cluster count
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        n_clusters_list.append(n_clusters)
+
+    fig = go.Figure(
+        data=go.Scatter(
+            x=n_clusters_list,
+            y=eps_values,
+            mode='lines+markers',
+            marker=dict(size=8),
+            hovertemplate='Clusters=%{x}<br>eps=%{y:.2f}<extra></extra>'
+        )
+    )
+    fig.update_layout(
+        title=f"DBSCAN: Number of Clusters vs eps (min_samples={min_samples})",
+        xaxis_title="Number of Clusters",
+        yaxis_title="eps",
+        template="plotly_white"
+    )
+    fig.show()
+
 
 #######################################
 ############# Mean Shift ##############
