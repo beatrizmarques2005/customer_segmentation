@@ -131,7 +131,13 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
     )
 
     # 4
-    customer_info.drop(['customer_name', 'customer_gender', 'customer_birthdate', 'loyalty_card_number'], axis=1, inplace=True)
+    customer_info['has_loyalty_card'] = customer_info['loyalty_card_number'].notna().astype(int)
+
+    # 5
+    customer_info['customer_lifetime'] = (2025 - customer_info['year_first_transaction']).where(customer_info['has_loyalty_card'] == 1,np.nan)
+
+    # 6
+    customer_info.drop(['customer_name', 'customer_birthdate', 'loyalty_card_number', 'year_first_transaction'], axis=1, inplace=True)
 
     return customer_info
 
@@ -158,6 +164,9 @@ def general_customer_basket_corrections(customer_basket: pd.DataFrame) -> tuple:
     """
 
     customer_basket['items_count'] = customer_basket['list_of_goods'].apply(len)
+    customer_basket['distinct_items_count'] = customer_basket['list_of_goods'].apply(
+        lambda x: sum(x.count(item) == 1 for item in x)
+    )
 
     customer_basket['list_of_goods'] = customer_basket['list_of_goods'].apply(eval)
 
@@ -260,9 +269,9 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     )
     collect(mask, "Problem with lifetime_total_distinct_products")
 
-    # 6. Year of first transaction > 2025
-    mask = (customer_info['year_first_transaction'] > 2025).fillna(False)
-    collect(mask, "Year of first transaction > 2025")
+    # 6. customer_lifetime < 0 years
+    mask = (customer_info['customer_lifetime'] < 0).fillna(False)
+    collect(mask, "customer_lifetime < 0")
 
     # 7. Percentage of products bought promotion < 0 or > 1
     mask = (
@@ -280,10 +289,10 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     # 9. Age VS year of first transaction (age at first transaction should be >= 0)
     mask = (
         (customer_info['age'].notna()) &
-        (customer_info['year_first_transaction'].notna()) &
-        ((customer_info['age'] - (2025 - customer_info['year_first_transaction'])) < 18)
+        (customer_info['customer_lifetime'].notna()) &
+        ((customer_info['age'] - customer_info['customer_lifetime']) < 18)
     )
-    collect(mask, "Age at first transaction < 0")
+    collect(mask, "Age at first transaction < 18")
 
     display(inconsistent_rows)
 
@@ -301,8 +310,8 @@ def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
         if row['distinct_stores_visited'] < 0:
             customer_info.loc[index, 'distinct_stores_visited'] *= -1
 
-        if row['year_first_transaction'] > 2025:
-            customer_info.loc[index, 'year_first_transaction'] = 2025
+        if row['customer_lifetime'] < 0:
+            customer_info.loc[index, 'customer_lifetime'] = 0
 
         if row['lifetime_total_distinct_products'] < 0:
             customer_info.loc[index, 'lifetime_total_distinct_products'] *= -1
@@ -324,10 +333,10 @@ def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
 
         if (
             pd.notna(row['age']) and
-            pd.notna(row['year_first_transaction']) and
-            (row['age'] - (2025 - row['year_first_transaction'])) < 18
+            pd.notna(row['customer_lifetime']) and
+            (row['age'] - row['customer_lifetime']) < 18
         ):
-            customer_info.loc[index, 'year_first_transaction'] = 2025
+            customer_info.loc[index, 'customer_lifetime'] = 0
 
     return customer_info
 
@@ -359,7 +368,7 @@ def check_outliers_numerical_boxplot(customer_info: pd.DataFrame) -> None:
     """
 
     numerical_columns = list(customer_info.select_dtypes(include=['number']))
-    columns_to_remove=['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
+    columns_to_remove=['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card']
     
     numerical_columns = [col for col in numerical_columns if col not in columns_to_remove]
     
@@ -410,7 +419,7 @@ def check_outliers_numerical_histogram(customer_info: pd.DataFrame) -> None:
 
     """
     numerical_columns = list(customer_info.select_dtypes(include=['number']))
-    columns_to_remove = ['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
+    columns_to_remove = ['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card']
     
     numerical_columns = [col for col in numerical_columns if col not in columns_to_remove]
     
@@ -465,7 +474,7 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     """
     categorical_columns = ['education_level']
-    numerical_with_categorical_behaviour= ['kids_home', 'teens_home', 'number_complaints', 'year_first_transaction', 'distinct_stores_visited', 'typical_hour']
+    numerical_with_categorical_behaviour= ['kids_home', 'teens_home', 'number_complaints', 'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card']
     categorical_columns.extend(numerical_with_categorical_behaviour)
 
     fig = go.Figure()
@@ -518,7 +527,8 @@ def treat_outliers(data: pd.DataFrame) -> pd.DataFrame:
         'lifetime_spend_hygiene': 2800,
         'lifetime_spend_videogames': 1600, # 1900
         'lifetime_spend_petfood': 900,
-        'lifetime_total_distinct_products': 600
+        'lifetime_total_distinct_products': 600,
+        'customer_lifetime': 25
     }
 
     mask = pd.Series(True, index=data.index)
@@ -726,7 +736,10 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
     education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 15, 'Msc': 17, 'Phd': 20}
     customer_info['education_years'] = customer_info['education_level'].map(education_mapping)
 
-    customer_info.drop(['education_level'], axis = 1, inplace = True)
+    gender_mapping = {'male': 0, 'female': 1}
+    customer_info['gender'] = customer_info['customer_gender'].map(gender_mapping)
+
+    customer_info.drop(['education_level', 'customer_gender'], axis = 1, inplace = True)
 
     return customer_info
 
@@ -792,7 +805,7 @@ def correlation_matrix(customer_info: pd.DataFrame) -> list:
     ))
 
     fig.update_layout(
-        title="Correlation Matrix (Lower Triangle)",
+        title="Correlation Matrix",
         xaxis=dict(tickangle=45),
         yaxis=dict(tickangle=0),
         autosize=True,
