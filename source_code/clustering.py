@@ -29,7 +29,8 @@ def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
         xaxis_title="Cluster",
         yaxis_title="Features",
         autosize=True,
-        margin=dict(l=40, r=40, t=60, b=40)
+        margin=dict(l=40, r=40, t=60, b=40),
+        height=800
     )
     fig.show()
     return summary

@@ -107,7 +107,6 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
     customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
     customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
-    customer_info.drop(['customer_name'], axis=1, inplace=True)
 
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
@@ -771,8 +770,43 @@ def scaling(data: pd.DataFrame) -> pd.DataFrame:
     scaled_data = scaler.fit_transform(data)
 
     scaled_data = pd.DataFrame(scaled_data, columns=data.columns)
+
+    # Save the fitted scaler for later use (e.g., for inverse transform or deployment)
+    scaled_data.attrs['scaler'] = scaler
  
-    return scaled_data
+    return scaled_data, scaler
+
+def unscale(scaled_data: pd.DataFrame, scaler: MinMaxScaler, columns: list = None) -> pd.DataFrame:
+    """
+    Unscales the scaled DataFrame using the provided MinMaxScaler.
+
+    Parameters:
+    -----------
+    scaled_data : pd.DataFrame
+        The scaled DataFrame to be unscaled.
+    scaler : MinMaxScaler
+        The fitted MinMaxScaler used for scaling.
+    columns : list, optional
+        List of columns to unscale. If None, all columns are unscaled.
+
+    Returns:
+    --------
+    pd.DataFrame
+        The DataFrame with specified columns unscaled.
+    """
+    # Inverse transform the entire dataset
+    unscaled_all = scaler.inverse_transform(scaled_data)
+    unscaled_all_df = pd.DataFrame(unscaled_all, columns=scaled_data.columns, index=scaled_data.index)
+
+    if columns is not None:
+        # Only replace the selected columns
+        result = scaled_data.copy()
+        result[columns] = unscaled_all_df[columns]
+        return result
+    else:
+        # Replace all
+        return unscaled_all_df
+
 
 #######################################
 ############# REDUNDANCY ##############
@@ -816,10 +850,7 @@ def correlation_matrix(customer_info: pd.DataFrame) -> list:
     fig.show()
 
 def treat_redundancy(data: pd.DataFrame, cols: list) -> pd.DataFrame:
-
-    data.drop(cols, axis = 1, inplace = True)
-
-    return data
+    return data.drop(cols, axis = 1)
 
 #######################################
 ########## FEATURE SELECTION ##########
