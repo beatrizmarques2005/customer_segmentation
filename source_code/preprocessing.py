@@ -107,7 +107,7 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
     customer_info['education_level'] = split_names[0].where(split_names[1].notna(), np.nan)
     customer_info['customer_name'] = split_names[1].fillna(split_names[0]).str.strip()
-
+    customer_info.drop(['customer_name'], axis=1, inplace=True)
 
     # 2
     customer_info['customer_birthdate'] = pd.to_datetime(customer_info['customer_birthdate'], errors='coerce') # object --> datetime64[ns]
