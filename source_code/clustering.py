@@ -6,6 +6,7 @@ from scipy.cluster.hierarchy import dendrogram
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.metrics import silhouette_score
 
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
@@ -65,13 +66,25 @@ def plot_dendrogram(model, **kwargs):
 ############### KMeans ################
 #######################################
 
-def kmeans_clustering(data: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
+def kmeans_clustering(data: pd.DataFrame, data_scaled: pd.DataFrame,  n_clusters: int) -> pd.DataFrame:
 
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)
 
-    data['cluster'] = kmeans.fit_predict(data)
+    data['KMeans'] = kmeans.fit_predict(data_scaled)
 
     return data
+
+def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range):
+    results = []
+
+    for k in k_range:
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        labels = kmeans.fit_predict(data_scaled)
+        score = silhouette_score(data_scaled, labels)
+        print(f"k = {k}, silhouette score = {score:.4f}")
+        results.append((k, score))
+
+    return results
 
 #######################################
 ################ SOM ##################
