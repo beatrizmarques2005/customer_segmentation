@@ -6,6 +6,7 @@ from scipy.cluster.hierarchy import dendrogram
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import silhouette_score
+import umap
 import plotly.graph_objects as go
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
@@ -32,6 +33,43 @@ def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
     )
     fig.show()
     return summary
+
+def visualize_clusters(data: pd.DataFrame, cluster_col: str, n_neighbors: int = None, min_dist: float = None, random_state: int = 42) -> None:
+    """
+    Visualize clusters in 2D using UMAP for dimensionality reduction.
+
+    Args:
+        data (pd.DataFrame): Input data including features and cluster labels.
+        cluster_col (str): Name of the column containing cluster labels.
+        n_neighbors (int): UMAP n_neighbors parameter.
+        min_dist (float): UMAP min_dist parameter.
+        random_state (int): Random seed for reproducibility.
+    """
+    features = data.drop(columns=[cluster_col])
+    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state)
+    embedding = reducer.fit_transform(features)
+
+    fig = go.Figure()
+    for cluster, group in data.groupby(cluster_col):
+        idx = group.index
+        fig.add_trace(go.Scatter(
+            x=embedding[idx, 0],
+            y=embedding[idx, 1],
+            mode='markers',
+            name=f'Cluster {cluster}',
+            marker=dict(size=8),
+            text=idx.astype(str)
+        ))
+
+    fig.update_layout(
+        title=f"Clusters Visualization (UMAP 2D): {cluster_col}",
+        xaxis_title="UMAP-1",
+        yaxis_title="UMAP-2",
+        legend_title="Cluster",
+        template="plotly_white"
+    )
+    fig.show()
+
 
 #######################################
 ############ HIERARQUICAL #############
