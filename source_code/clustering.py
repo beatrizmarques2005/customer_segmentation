@@ -5,7 +5,9 @@ from sklearn.cluster import estimate_bandwidth
 from scipy.cluster.hierarchy import dendrogram
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import silhouette_score
+import matplotlib.cm as cm
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.base import ClusterMixin
 import umap
 import plotly.graph_objects as go
 
@@ -149,17 +151,71 @@ def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
     )
     fig.show()
 
-def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range):
+def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
     results = []
 
     for k in k_range:
         kmeans = KMeans(n_clusters=k, random_state=42)
         labels = kmeans.fit_predict(data_scaled)
-        score = silhouette_score(data_scaled, labels)
+        avg_score = silhouette_score(data_scaled, labels)
         print(f"k = {k}, silhouette score = {score:.4f}")
         results.append((k, score))
 
     return results
+
+def plot_silhouette(data_scaled, model: ClusterMixin, n_clusters: int, title: str = None):
+    """
+    Plots a silhouette plot for any clustering algorithm.
+    
+    Parameters:
+    - X: Scaled input data (np.array or pd.DataFrame)
+    - model: A clustering model
+    - n_clusters: Number of clusters used in the model
+    - title: Optional plot title
+    """
+    # Fit the model and get cluster labels
+    #if hasattr(model, "fit_predict"):
+        
+    cluster_labels = model.fit_predict(data_scaled)
+    #else:
+    #    model.fit(X)
+    #    cluster_labels = model.labels_
+
+    silhouette_avg = silhouette_score(data_scaled, cluster_labels)
+    print(f"n_clusters = {n_clusters}, average silhouette_score = {silhouette_avg:.4f}")
+    sample_silhouette_values = silhouette_samples(data_scaled, cluster_labels)
+
+    fig, ax1 = plt.subplots(1, 1)
+    fig.set_size_inches(10, 6)
+
+    ax1.set_xlim([-0.1, 1])
+    ax1.set_ylim([0, len(data_scaled) + (n_clusters + 1) * 10])
+
+    y_lower = 10
+    for i in range(n_clusters):
+        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
+        ith_cluster_silhouette_values.sort()
+
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+
+        color = cm.nipy_spectral(float(i) / n_clusters)
+        ax1.fill_betweenx(np.arange(y_lower, y_upper),
+                          0, ith_cluster_silhouette_values,
+                          facecolor=color, edgecolor=color, alpha=0.7)
+        ax1.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
+        y_lower = y_upper + 10
+
+    ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
+
+    ax1.set_title(title or f"Silhouette Plot (n_clusters={n_clusters})")
+    ax1.set_xlabel("Silhouette Coefficient Values")
+    ax1.set_ylabel("Cluster Label")
+    ax1.set_yticks([])
+    ax1.set_xticks(np.linspace(-0.1, 1.0, 12))
+
+    plt.tight_layout()
+    plt.show()
 
 #######################################
 ################ SOM ##################
