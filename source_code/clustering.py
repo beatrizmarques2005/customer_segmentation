@@ -125,6 +125,8 @@ def kmeans_clustering(data: pd.DataFrame, data_scaled: pd.DataFrame,  n_clusters
 
     data['KMeans'] = kmeans.fit_predict(data_scaled)
 
+    silhouette_score = silhouette_score(data_scaled, kmeans.fit_predict(data_scaled))
+    print(f"KMeans Silhouette Score: {silhouette_score:.4f}")
     return data
 
 def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
