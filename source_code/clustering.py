@@ -10,6 +10,7 @@ from sklearn.metrics import silhouette_samples, silhouette_score
 from sklearn.base import ClusterMixin
 import umap
 import plotly.graph_objects as go
+from sklearn.decomposition import PCA
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
 
@@ -151,6 +152,11 @@ def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
     )
     fig.show()
 
+
+####################################################
+################ Silhouette Score ##################
+####################################################
+
 def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
     results = []
 
@@ -158,8 +164,8 @@ def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
         kmeans = KMeans(n_clusters=k, random_state=42)
         labels = kmeans.fit_predict(data_scaled)
         avg_score = silhouette_score(data_scaled, labels)
-        print(f"k = {k}, silhouette score = {score:.4f}")
-        results.append((k, score))
+        print(f"k = {k}, silhouette score = {avg_score:.4f}")
+        results.append((k, avg_score))
 
     return results
 
@@ -221,20 +227,69 @@ def plot_silhouette(data_scaled, model: ClusterMixin, n_clusters: int, title: st
 ################ SOM ##################
 #######################################
 
-def som_clustering(data: pd.DataFrame, x: int = 10, y: int = 10, input_len: int = None, sigma: float = 1.0, learning_rate: float = 0.5, iterations: int = 100) -> pd.DataFrame:
+def som(data_np: np.ndarray,
+                                        data: pd.DataFrame, 
+                                        x: int, 
+                                        y: int, 
+                                        input_len: int, 
+                                        sigma: float = 0.5,
+                                        learning_rate: float = 1,
+                                        neighborhood_function: str ='gaussian', 
+                                        random_seed: int = 42,
+                                        number_of_iterations: int = 1000) -> MiniSom:
+    """
+    Train a Self-Organizing Map (SOM) using the given data.
 
-    if input_len is None:
-        input_len = data.shape[1]
+    Args:
+        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
+        x (int): The number of rows in the SOM grid.
+        y (int): The number of columns in the SOM grid.
+        input_len (int): The number of features in the input data.
+        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
+        learning_rate (float, optional): The initial learning rate. Default is 0.5.
+        random_seed (int, optional): The seed for random number generation. Default is None.
+        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
 
-    som = MiniSom(x, y, input_len, sigma=sigma, learning_rate=learning_rate)
+    Returns:
+        MiniSom: The trained SOM model.
+    """
+    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
+    som.train_batch(data_np, number_of_iterations)
 
-    som.random_weights_init(data.values)
-
-    som.train_random(data.values, iterations)
-
-    data['cluster'] = [som.winner(row) for row in data.values]
-
+    data['winner_node'] = ([som.winner(data_np[i]) for i in range(len(data_np))])
     return data
+
+def som_mean_clusters(data, col):
+    """
+    Calculate the mean of a specified column grouped by SOM winner nodes.
+
+    Args:
+        data (pd.DataFrame): The input DataFrame containing the data.
+        col (str): The column name for which the mean is calculated.
+
+    Returns:
+        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
+    """
+    grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
+    return grouped
+
+def som_lattice(data_np: np.ndarray,
+                                        x: int, 
+                                        y: int, 
+                                        input_len: int, 
+                                        sigma: float = 0.5,
+                                        learning_rate: float = 1,
+                                        neighborhood_function: str ='gaussian', 
+                                        random_seed: int = 42,
+                                        number_of_iterations: int = 1000):
+
+    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
+    som.train_batch(data_np, number_of_iterations)
+    plt.pcolor(som.distance_map().T, cmap='bone_r')
+    plt.colorbar()
+    
+
+
 
 
 #######################################
