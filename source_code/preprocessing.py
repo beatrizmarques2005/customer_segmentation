@@ -538,20 +538,20 @@ def treat_outliers(data: pd.DataFrame) -> pd.DataFrame:
 
 ## Multi Dimensional Outliers --> DBSCAN
 
-def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> None:
-
+def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> pd.DataFrame:
+    # Exclude 'customer_id' from DBSCAN input
+    features = customer_info.drop(columns=['customer_id']) if 'customer_id' in customer_info.columns else customer_info.copy()
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-
-    customer_info['cluster_dbscan'] = dbscan.fit_predict(customer_info)
-
+    clusters = dbscan.fit_predict(features)
+    customer_info = customer_info.copy()
+    customer_info['cluster_dbscan'] = clusters
     customer_info['is_outlier_dbscan'] = customer_info['cluster_dbscan'] == -1
-
     return customer_info
 
 def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: int, eps_range: tuple) -> None:
 
     for eps in np.arange(*eps_range):
-        
+
         print('=====================================')
 
         ci_dbscan = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
@@ -563,11 +563,9 @@ def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: in
         print(f"With eps = {eps}\n\tNumber of clusters (not outliers): {num_clusters}\n\tTotal number of outliers: {total_outliers}")
 
 def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> pd.DataFrame:
-
     customer_info = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
     customer_info = customer_info[customer_info['is_outlier_dbscan'] == False]
     customer_info.drop(columns=['cluster_dbscan', 'is_outlier_dbscan'], inplace=True)
-
     return customer_info
 
 #######################################
@@ -673,9 +671,8 @@ def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
 
 def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFrame:
     """
-    This function applies KNN imputation to all columns except 'customer_id', ensuring that
-    the 'customer_id' column remains unchanged. The imputed values are based on the 
-    similarity of rows in the dataset.
+    Applies KNN imputation to all columns except 'customer_id', ensuring that
+    the 'customer_id' column remains unchanged.
 
     Parameters:
     -----------
@@ -688,24 +685,15 @@ def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFr
     --------
     pd.DataFrame
         A new DataFrame with missing values imputed. The 'customer_id' column is preserved as is.
-
-    Notes:
-    ------
-    - This function assumes that the input DataFrame contains numeric data for imputation.
-    - The KNN imputation is performed using sklearn's KNNImputer.
-    - The 'customer_id' column is excluded from the imputation process and added back after imputation.
     """
-
+    id_col = customer_info['customer_id']
     features = customer_info.drop(columns=['customer_id'])
 
     imputer = KNNImputer(n_neighbors=n_neighbors)
-
     imputed_features = imputer.fit_transform(features)
+    imputed_data = pd.DataFrame(imputed_features, columns=features.columns, index=customer_info.index)
 
-    imputed_data = pd.DataFrame(imputed_features, columns=features.columns)
-
-    imputed_data['customer_id'] = customer_info['customer_id'].values
-
+    imputed_data.insert(0, 'customer_id', id_col)
     return imputed_data
 
 
@@ -746,66 +734,35 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
 ############### SCALING ###############
 #######################################
 
-def scaling(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Scales the input DataFrame using Min-Max scaling.
+def scaling(data: pd.DataFrame) -> (pd.DataFrame, MinMaxScaler):
 
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        The input DataFrame containing the data to be scaled.
-    Returns:
-    --------
-    pd.DataFrame
-        A new DataFrame with the scaled data, where all feature values are
-        normalized to the range [0, 1].
-    Notes:
-    ------
-    - This function assumes that the input DataFrame contains only numeric data.
-    - The scaling is performed column-wise.
-    """
-    
-    scaler = MinMaxScaler()
-
-    scaled_data = scaler.fit_transform(data)
-
-    scaled_data = pd.DataFrame(scaled_data, columns=data.columns)
-
-    # Save the fitted scaler for later use (e.g., for inverse transform or deployment)
-    scaled_data.attrs['scaler'] = scaler
- 
-    return scaled_data, scaler
-
-def unscale(scaled_data: pd.DataFrame, scaler: MinMaxScaler, columns: list = None) -> pd.DataFrame:
-    """
-    Unscales the scaled DataFrame using the provided MinMaxScaler.
-
-    Parameters:
-    -----------
-    scaled_data : pd.DataFrame
-        The scaled DataFrame to be unscaled.
-    scaler : MinMaxScaler
-        The fitted MinMaxScaler used for scaling.
-    columns : list, optional
-        List of columns to unscale. If None, all columns are unscaled.
-
-    Returns:
-    --------
-    pd.DataFrame
-        The DataFrame with specified columns unscaled.
-    """
-    # Inverse transform the entire dataset
-    unscaled_all = scaler.inverse_transform(scaled_data)
-    unscaled_all_df = pd.DataFrame(unscaled_all, columns=scaled_data.columns, index=scaled_data.index)
-
-    if columns is not None:
-        # Only replace the selected columns
-        result = scaled_data.copy()
-        result[columns] = unscaled_all_df[columns]
-        return result
+    if 'customer_id' in data.columns:
+        id_col = data['customer_id']
+        features = data.drop(columns=['customer_id'])
     else:
-        # Replace all
-        return unscaled_all_df
+        id_col = None
+        features = data
+
+    scaler = MinMaxScaler()
+    scaled_features = scaler.fit_transform(features)
+    scaled_df = pd.DataFrame(scaled_features, columns=features.columns, index=data.index)
+
+    if id_col is not None:
+        scaled_df.insert(0, 'customer_id', id_col)
+
+    scaled_df.attrs['scaler'] = scaler
+
+    return scaled_df, scaler
+
+def unscale_dataframe(scaled_df, scaler, columns=None):
+    # Exclude 'customer_id' from unscaling
+    cols = [col for col in (columns if columns is not None else scaled_df.columns) if col != 'customer_id']
+    unscaled_array = scaler.inverse_transform(scaled_df[cols])
+    unscaled_df = pd.DataFrame(unscaled_array, columns=cols, index=scaled_df.index)
+    # If customer_id exists, add it back as the first column
+    if 'customer_id' in scaled_df.columns:
+        unscaled_df.insert(0, 'customer_id', scaled_df['customer_id'])
+    return unscaled_df
 
 
 #######################################
