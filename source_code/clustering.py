@@ -12,33 +12,61 @@ import umap
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 
-def summarise_clusters(data: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
+def summarise_clusters(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, scaled: bool = False) -> pd.DataFrame:
+    """
+    Summarize cluster feature means, excluding specified columns.
 
-    summary = data.groupby(cluster_col).mean(numeric_only=True).T
+    Args:
+        data (pd.DataFrame): Input data including cluster labels.
+        cluster_col (str): Name of the column containing cluster labels.
+        exclude_cols (list, optional): Columns to exclude from the summary.
+        scaled (bool): If True, use colored heatmap; if False, just print the DataFrame.
 
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=summary.values,
-            x=summary.columns.astype(str),
-            y=summary.index,
-            colorscale="viridis",
-            colorbar=dict(title="Mean"),
-            text=np.round(summary.values, 2),
-            texttemplate="%{text}"
+    Returns:
+        pd.DataFrame: Transposed mean values for each cluster.
+    """
+    if exclude_cols is None:
+        exclude_cols = []
+    cols = [col for col in data.columns if col not in exclude_cols + [cluster_col]]
+    summary = data.groupby(cluster_col)[cols].mean(numeric_only=True).T
+
+    if scaled:
+        colorscale = "viridis"
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=summary.values,
+                x=summary.columns.astype(str),
+                y=summary.index,
+                colorscale=colorscale,
+                colorbar=dict(title="Mean"),
+                showscale=True,
+                text=np.round(summary.values, 2),
+                texttemplate="%{text}"
+            )
         )
-    )
-    fig.update_layout(
-        title="Cluster Feature Means",
-        xaxis_title="Cluster",
-        yaxis_title="Features",
-        autosize=True,
-        margin=dict(l=40, r=40, t=60, b=40),
-        height=800
-    )
-    fig.show()
+        fig.update_layout(
+            title="Cluster Feature Means",
+            xaxis_title="Cluster",
+            yaxis_title="Features",
+            autosize=True,
+            margin=dict(l=40, r=40, t=60, b=40),
+            height=800
+        )
+        fig.show()
+    else:
+        print(f'Cluster Summary (not scaled data):')
+        display(summary)
+
     return summary
 
-def visualize_clusters(data: pd.DataFrame, cluster_col: str, n_neighbors: int = None, min_dist: float = None, random_state: int = 42) -> None:
+def visualize_clusters(
+    data: pd.DataFrame,
+    cluster_col: str,
+    n_neighbors: int = None,
+    min_dist: float = None,
+    random_state: int = 42,
+    exclude_cols: list = None
+) -> None:
     """
     Visualize clusters in 2D using UMAP for dimensionality reduction.
 
@@ -48,8 +76,11 @@ def visualize_clusters(data: pd.DataFrame, cluster_col: str, n_neighbors: int = 
         n_neighbors (int): UMAP n_neighbors parameter.
         min_dist (float): UMAP min_dist parameter.
         random_state (int): Random seed for reproducibility.
+        exclude_cols (list, optional): Columns to exclude from UMAP embedding.
     """
-    features = data.drop(columns=[cluster_col])
+    if exclude_cols is None:
+        exclude_cols = []
+    features = data.drop(columns=[cluster_col] + exclude_cols)
     reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, random_state=random_state)
     embedding = reducer.fit_transform(features)
 
@@ -79,40 +110,51 @@ def visualize_clusters(data: pd.DataFrame, cluster_col: str, n_neighbors: int = 
 ############ HIERARQUICAL #############
 #######################################
 
-def hierarchical_clustering(data: pd.DataFrame, n_clusters: int = None) -> tuple[pd.DataFrame, AgglomerativeClustering]:
+def hierarchical_clustering(data: pd.DataFrame, n_clusters: int = None, exclude_cols: list = None) -> tuple[pd.DataFrame, AgglomerativeClustering]:
     data = data.copy()
+
+    features = data.drop(columns=[col for col in exclude_cols if col in data.columns])
 
     if n_clusters is None:
         model = AgglomerativeClustering(distance_threshold=0, n_clusters=None)
     else:
         model = AgglomerativeClustering(n_clusters=n_clusters)
 
-    model.fit(data)
+    model.fit(features)
     data['cluster'] = model.labels_
     return data, model
 
 
-def plot_dendrogram(model, **kwargs):
-
+def plot_dendrogram(model, y_line: float, **kwargs):
+    """
+    Plots a dendrogram for a fitted AgglomerativeClustering model with larger size, more y-axis labels, and a grid.
+    Ensures only one figure is plotted.
+    """
     counts = np.zeros(model.children_.shape[0])
     n_samples = len(model.labels_)
 
     for i, merge in enumerate(model.children_):
         current_count = 0
-
         for child_idx in merge:
             if child_idx < n_samples:
                 current_count += 1  # leaf node
             else:
                 current_count += counts[child_idx - n_samples]
-
         counts[i] = current_count
 
     linkage_matrix = np.column_stack(
         [model.children_, model.distances_, counts]
     ).astype(float)
 
-    dendrogram(linkage_matrix, **kwargs)
+    fig, ax = plt.subplots(figsize=(18, 8))  # Use subplots to avoid multiple figures
+    dendrogram(linkage_matrix, ax=ax, **kwargs)
+    ax.set_ylabel("Distance")
+    ax.set_xlabel("Sample Index or (Cluster Size)")
+    ax.set_yticks(np.linspace(0, np.max(model.distances_), 20))  # More y-axis labels
+    ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+    ax.axhline(y=y_line, color='black', linestyle='--')  # Add horizontal line at y=27
+    plt.tight_layout()
+    plt.show()
 
 
 #######################################
@@ -291,34 +333,50 @@ def som_lattice(data_np: np.ndarray,
     plt.colorbar()
     
 
-
-
-
 #######################################
 ############### DBScan ################
 #######################################
 
-def dbscan_clustering(data, eps: float, min_samples: int) -> pd.DataFrame:
+def dbscan_clustering(data: pd.DataFrame, eps: float, min_samples: int, exclude_cols: list = None) -> pd.DataFrame:
+    """
+    Perform DBSCAN clustering, with optional exclusion of columns.
+
+    Args:
+        data (pd.DataFrame): Input data.
+        eps (float): The maximum distance between two samples for them to be considered as in the same neighborhood.
+        min_samples (int): The number of samples in a neighborhood for a point to be considered as a core point.
+        exclude_cols (list, optional): Columns to exclude from clustering.
+
+    Returns:
+        pd.DataFrame: DataFrame with a new 'cluster' column.
+    """
+    if exclude_cols is None:
+        exclude_cols = []
+    features = data.drop(columns=exclude_cols) if exclude_cols else data
 
     model = DBSCAN(eps=eps, min_samples=min_samples)
-
-    data['cluster'] = model.fit_predict(data)
+    data['cluster'] = model.fit_predict(features)
 
     return data
 
-def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_values: list) -> None:
+def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_values: list, exclude_cols: list = None) -> None:
     """
-    Plots the number of clusters found by DBSCAN as a function of eps.
+    Plots the number of clusters found by DBSCAN as a function of eps, with axes switched.
 
     Args:
         data (pd.DataFrame): The input data for clustering.
         min_samples (int): The min_samples parameter for DBSCAN.
         eps_values (list): List of eps values to try.
+        exclude_cols (list, optional): Columns to exclude from clustering.
     """
+    if exclude_cols is None:
+        exclude_cols = []
+    features = data.drop(columns=exclude_cols) if exclude_cols else data
+
     n_clusters_list = []
     for eps in eps_values:
         model = DBSCAN(eps=eps, min_samples=min_samples)
-        labels = model.fit_predict(data)
+        labels = model.fit_predict(features)
         # Exclude noise label (-1) from cluster count
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
         n_clusters_list.append(n_clusters)
@@ -333,7 +391,7 @@ def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_v
         )
     )
     fig.update_layout(
-        title=f"DBSCAN: Number of Clusters vs eps (min_samples={min_samples})",
+        title=f"DBSCAN: eps vs Number of Clusters (min_samples={min_samples})",
         xaxis_title="Number of Clusters",
         yaxis_title="eps",
         template="plotly_white"
@@ -371,62 +429,6 @@ def spectral_clustering(data_scaled: pd.DataFrame, data: pd.DataFrame, n_cluster
 
 
 '''
-# Mean Shift
-def check_multidimensional_outliers_mean_shift(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
-    """
-    Identifies multidimensional outliers using the Mean Shift clustering algorithm and visualizes the results.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
-    
-    nr_obs_small_clusters : int
-        The threshold for the minimum number of observations in a cluster to be considered valid.
-        Below this threshold, the cluster is considered small, therefore the point is an outlier.
-
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
-
-    mean_shift = MeanShift()
-    mean_shift.fit(customer_info)
-
-    customer_info['cluster_mean_shift'] = mean_shift.labels_
-
-    cluster_sizes = customer_info['cluster_mean_shift'].value_counts()
-    small_clusters = cluster_sizes[cluster_sizes < nr_obs_small_clusters].index  # Threshold
-    customer_info['is_outlier_mean_shift'] = customer_info['cluster_mean_shift'].isin(small_clusters)
-
-    return customer_info
-
-# Isolation Forest
-def check_multidimensional_outliers_isolation_forest(customer_info: pd.DataFrame, nr_obs_small_clusters: int) -> None:
-    """
-    Identifies multidimensional outliers using the Isolation Forest algorithm and visualizes the results.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        A pandas DataFrame containing numerical features to analyze for multidimensional outliers.
-    
-    nr_obs_small_clusters : int
-        The threshold for the minimum number of observations in a cluster to be considered valid.
-        Below this threshold, the cluster is considered small, therefore the point is an outlier.
-
-    Returns:
-    --------
-    None
-        The function displays a scatter plot with clusters and highlights potential outliers.
-    """
-
-    isolation_forest = IsolationForest(contamination=0.1)
-    customer_info['is_outlier_isolation_forest'] = isolation_forest.fit_predict(customer_info) == -1
-
-    return customer_info
-
 # SOM
 def check_multidimensional_outliers_som(data: pd.DataFrame, 
                                         x: int, 
