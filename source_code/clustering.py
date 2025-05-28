@@ -125,8 +125,8 @@ def kmeans_clustering(data: pd.DataFrame, data_scaled: pd.DataFrame,  n_clusters
 
     data['KMeans'] = kmeans.fit_predict(data_scaled)
 
-    silhouette_score = silhouette_score(data_scaled, kmeans.fit_predict(data_scaled))
-    print(f"KMeans Silhouette Score: {silhouette_score:.4f}")
+    #silhouette_score = silhouette_score(data_scaled, kmeans.fit_predict(data_scaled))
+    #print(f"KMeans Silhouette Score: {silhouette_score:.4f}")
     return data
 
 def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
@@ -359,11 +359,12 @@ def mean_shift_clustering(data: pd.DataFrame, quantile: float, n_samples: int) -
 ######## Spectral Clustering ##########
 #######################################
 
-def spectral_clustering(data: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
+def spectral_clustering(data_scaled: pd.DataFrame, data: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
 
     model = SpectralClustering(n_clusters=n_clusters, affinity='nearest_neighbors', random_state=42)
 
-    data['cluster'] = model.fit_predict(data)
+    data['cluster'] = model.fit_predict(data_scaled)
+    
 
     return data
 
