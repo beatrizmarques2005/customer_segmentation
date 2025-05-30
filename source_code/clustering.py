@@ -27,6 +27,7 @@ def summarise_clusters(data: pd.DataFrame, cluster_col: str, exclude_cols: list 
     """
     if exclude_cols is None:
         exclude_cols = []
+        
     cols = [col for col in data.columns if col not in exclude_cols + [cluster_col]]
     summary = data.groupby(cluster_col)[cols].mean(numeric_only=True).T
 
