@@ -172,32 +172,47 @@ def kmeans_clustering(data: pd.DataFrame, data_scaled: pd.DataFrame,  n_clusters
     #print(f"KMeans Silhouette Score: {silhouette_score:.4f}")
     return data
 
-def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
+def plot_elbow(data: pd.DataFrame, max_k: int = 10, exclude_cols: list = None) -> None:
+    """
+    Plot the Elbow Method using Plotly, with option to exclude columns from clustering.
+
+    Args:
+        data (pd.DataFrame): Input data.
+        max_k (int): Maximum number of clusters to try.
+        exclude_cols (list, optional): Columns to exclude from clustering.
+    """
+    if exclude_cols is None:
+        exclude_cols = []
+    features = data.drop(columns=exclude_cols) if exclude_cols else data
+
     inertia = []
     for k in range(1, max_k + 1):
         kmeans = KMeans(n_clusters=k, random_state=42)
-        kmeans.fit(data)
+        kmeans.fit(features)
         inertia.append(kmeans.inertia_)
-        
+
     fig = go.Figure(
         data=go.Scatter(
             x=list(range(1, max_k + 1)),
             y=inertia,
             mode='lines+markers',
-            marker=dict(size=8),
-            hovertemplate='K=%{x}<br>Inertia=%{y:.2f}<extra></extra>'
+            marker=dict(size=10, color='royalblue'),
+            line=dict(width=2),
+            hovertemplate='<b>K = %{x}</b><br>Inertia = %{y:.2f}<extra></extra>'
         )
     )
+
     fig.update_layout(
-        title="Elbow Method",
+        title="Elbow Method for Optimal K (Plotly)",
         xaxis_title="Number of Clusters (K)",
-        yaxis_title="Inertia",
+        yaxis_title="Inertia (Within-Cluster Sum of Squares)",
         xaxis=dict(dtick=1),
-        template="plotly_white"
+        template="plotly_white",
+        hovermode='x unified'
     )
     fig.show()
 
-def plot_elbow_kmeans(data: pd.DataFrame) -> None:
+'''def plot_elbow_kmeans(data: pd.DataFrame) -> None:
 
 
     dispersion = []
@@ -208,7 +223,7 @@ def plot_elbow_kmeans(data: pd.DataFrame) -> None:
     plt.plot(range(1, 50), dispersion, marker='o')
     plt.xlabel('Number of clusters')
     plt.ylabel('Dispersion (inertia)')
-    plt.show()
+    plt.show()'''
 
 ####################################################
 ################ Silhouette Score ##################
