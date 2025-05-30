@@ -196,6 +196,18 @@ def plot_elbow(data: pd.DataFrame, max_k: int = 10) -> None:
     )
     fig.show()
 
+def plot_elbow_kmeans(data: pd.DataFrame) -> None:
+
+
+    dispersion = []
+    for k in range(1, 50):
+        kmeans = KMeans(n_clusters=k, random_state=0).fit(data)
+        dispersion.append(kmeans.inertia_)
+
+    plt.plot(range(1, 50), dispersion, marker='o')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Dispersion (inertia)')
+    plt.show()
 
 ####################################################
 ################ Silhouette Score ##################
@@ -266,6 +278,12 @@ def plot_silhouette(data_scaled, model: ClusterMixin, n_clusters: int, title: st
 
     plt.tight_layout()
     plt.show()
+
+def avg_silhouette_score(data: pd.DataFrame) -> float:
+    kmeans = KMeans(n_clusters=10, random_state=42)
+    silhouette_avg = silhouette_score(data, kmeans.fit_predict(data))
+    return silhouette_avg
+
 
 #######################################
 ################ SOM ##################
