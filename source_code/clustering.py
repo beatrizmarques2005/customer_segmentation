@@ -106,9 +106,27 @@ def visualize_clusters(
     )
     fig.show()
 
+def cluster_sizes(data: pd.DataFrame, cluster_col: str, show_plot: bool = True) -> pd.Series:
+
+    sizes = data[cluster_col].value_counts().sort_index()
+
+    fig = go.Figure(
+        data=go.Bar(
+            x=sizes.index.astype(str),
+            y=sizes.values,
+            marker_color='skyblue'
+        )
+    )
+    fig.update_layout(
+        title='Cluster Sizes',
+        xaxis_title='Cluster',
+        yaxis_title='Number of IDs',
+        template='plotly_white'
+    )
+    fig.show()
 
 #######################################
-############ HIERARQUICAL #############
+############ HIERARCHICAL #############
 #######################################
 
 def hierarchical_clustering(data: pd.DataFrame, n_clusters: int = None, exclude_cols: list = None) -> tuple[pd.DataFrame, AgglomerativeClustering]:
@@ -162,23 +180,49 @@ def plot_dendrogram(model, y_line: float, **kwargs):
 ############### KMeans ################
 #######################################
 
-def kmeans_clustering(data: pd.DataFrame, data_scaled: pd.DataFrame,  n_clusters: int) -> pd.DataFrame:
+def kmeans_clustering(data_scaled: pd.DataFrame, n_clusters: int, exclude_cols: list = None) -> pd.DataFrame:
+    """
+    Perform KMeans clustering, with optional exclusion of columns.
+        data_scaled (pd.DataFrame): Scaled data for clustering.
+        n_clusters (int): Number of clusters.
+        exclude_cols (list, optional): Columns to exclude from clustering.
+
+    Returns:
+        pd.DataFrame: DataFrame with a new 'cluster' column and centroids DataFrame including all columns.
+    """
+    if exclude_cols is None:
+        exclude_cols = []
+
+    features = data_scaled.drop(columns=exclude_cols, errors='ignore') if exclude_cols else data_scaled
 
     kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    cluster_labels = kmeans.fit_predict(features)
 
-    data['KMeans'] = kmeans.fit_predict(data_scaled)
+    result = data_scaled.copy()
+    result['cluster'] = cluster_labels
 
-    #silhouette_score = silhouette_score(data_scaled, kmeans.fit_predict(data_scaled))
-    #print(f"KMeans Silhouette Score: {silhouette_score:.4f}")
-    return data
+    # Prepare centroids DataFrame with all columns (excluded columns use their mean values)
+    all_columns = list(data_scaled.columns)
+    centroids = pd.DataFrame(index=range(n_clusters), columns=all_columns)
 
-def plot_elbow(data: pd.DataFrame, max_k: int = 10, exclude_cols: list = None) -> None:
+    # Set centroids for features used in clustering
+    centroids.loc[:, features.columns] = kmeans.cluster_centers_
+
+    # For excluded columns, use their mean values from the original data
+    for col in exclude_cols:
+        if col in data_scaled.columns:
+            col_means = result.groupby('cluster')[col].mean().values
+            centroids[col] = col_means
+
+    return result, centroids
+
+def plot_elbow(data: pd.DataFrame, max_n_cluster: int = 10, exclude_cols: list = None) -> None:
     """
     Plot the Elbow Method using Plotly, with option to exclude columns from clustering.
 
     Args:
         data (pd.DataFrame): Input data.
-        max_k (int): Maximum number of clusters to try.
+        max_n_cluster (int): Maximum number of clusters to try.
         exclude_cols (list, optional): Columns to exclude from clustering.
     """
     if exclude_cols is None:
@@ -186,25 +230,25 @@ def plot_elbow(data: pd.DataFrame, max_k: int = 10, exclude_cols: list = None) -
     features = data.drop(columns=exclude_cols) if exclude_cols else data
 
     inertia = []
-    for k in range(1, max_k + 1):
-        kmeans = KMeans(n_clusters=k, random_state=42)
+    for n_cluster in range(1, max_n_cluster + 1):
+        kmeans = KMeans(n_clusters=n_cluster, random_state=42)
         kmeans.fit(features)
         inertia.append(kmeans.inertia_)
 
     fig = go.Figure(
         data=go.Scatter(
-            x=list(range(1, max_k + 1)),
+            x=list(range(1, max_n_cluster + 1)),
             y=inertia,
             mode='lines+markers',
             marker=dict(size=10, color='royalblue'),
             line=dict(width=2),
-            hovertemplate='<b>K = %{x}</b><br>Inertia = %{y:.2f}<extra></extra>'
+            hovertemplate='<b>Number of Clusters = %{x}</b><br>Inertia = %{y:.2f}<extra></extra>'
         )
     )
 
     fig.update_layout(
         title="Elbow Method for Optimal K (Plotly)",
-        xaxis_title="Number of Clusters (K)",
+        xaxis_title="Number of Clusters",
         yaxis_title="Inertia (Within-Cluster Sum of Squares)",
         xaxis=dict(dtick=1),
         template="plotly_white",
@@ -212,7 +256,89 @@ def plot_elbow(data: pd.DataFrame, max_k: int = 10, exclude_cols: list = None) -
     )
     fig.show()
 
-'''def plot_elbow_kmeans(data: pd.DataFrame) -> None:
+def avg_silhouette_score(data: pd.DataFrame, n_cluster: int, exclude_cols: list = None) -> float:
+
+    if exclude_cols is None:
+        exclude_cols = []
+
+    features = data.drop(columns=exclude_cols) if exclude_cols else data
+
+    kmeans = KMeans(n_clusters=n_cluster, random_state=42)
+    silhouette_avg = silhouette_score(features, kmeans.fit_predict(features))
+
+    return silhouette_avg
+
+def plot_silhouette(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, title: str = None):
+    """
+    Plot the silhouette scores for the clustering result using Plotly.
+
+    Args:
+        data (pd.DataFrame): DataFrame containing features and cluster labels.
+        cluster_col (str): Name of the column with cluster labels.
+        exclude_cols (list, optional): Columns to exclude from features.
+        title (str, optional): Plot title.
+    """
+    if exclude_cols is None:
+        exclude_cols = []
+    features = data.drop(columns=[cluster_col] + exclude_cols, errors='ignore')
+    cluster_labels = data[cluster_col].values
+    n_clusters = len(np.unique(cluster_labels))
+
+    if n_clusters < 2:
+        print("Silhouette plot requires at least 2 clusters.")
+        return
+
+    silhouette_avg = silhouette_score(features, cluster_labels)
+    sample_silhouette_values = silhouette_samples(features, cluster_labels)
+
+    # Prepare data for Plotly
+    y_lower = 10
+    traces = []
+    for i in range(n_clusters):
+        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
+        ith_cluster_silhouette_values.sort()
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+
+        y_vals = np.arange(y_lower, y_upper)
+        color = f"hsl({int(360 * i / n_clusters)},70%,50%)"
+        traces.append(
+            go.Scatter(
+                x=ith_cluster_silhouette_values,
+                y=y_vals,
+                mode='lines',
+                fill='tozerox',
+                line=dict(color=color),
+                name=f'Cluster {i}',
+                showlegend=True
+            )
+        )
+        y_lower = y_upper + 10
+
+    # Add average silhouette line
+    traces.append(
+        go.Scatter(
+            x=[silhouette_avg, silhouette_avg],
+            y=[0, y_lower],
+            mode='lines',
+            line=dict(color='red', dash='dash'),
+            name='Average Silhouette'
+        )
+    )
+
+    layout = go.Layout(
+        title=title or f"Silhouette Plot (n_clusters={n_clusters})",
+        xaxis=dict(title="Silhouette Coefficient Values", range=[-0.1, 1.0], dtick=0.1),
+        yaxis=dict(title="Sample Index", showticklabels=False),
+        legend=dict(title="Cluster"),
+        height=600,
+        template="plotly_white"
+    )
+
+    fig = go.Figure(data=traces, layout=layout)
+    fig.show()
+
+'''def plot_elbow_kmeans(data: pd.DataFrame) -> None:s
 
 
     dispersion = []
@@ -225,11 +351,7 @@ def plot_elbow(data: pd.DataFrame, max_k: int = 10, exclude_cols: list = None) -
     plt.ylabel('Dispersion (inertia)')
     plt.show()'''
 
-####################################################
-################ Silhouette Score ##################
-####################################################
-
-def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
+'''def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
     results = []
 
     for k in k_range:
@@ -239,66 +361,7 @@ def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
         print(f"k = {k}, silhouette score = {avg_score:.4f}")
         results.append((k, avg_score))
 
-    return results
-
-def plot_silhouette(data_scaled, model: ClusterMixin, n_clusters: int, title: str = None):
-    """
-    Plots a silhouette plot for any clustering algorithm.
-    
-    Parameters:
-    - X: Scaled input data (np.array or pd.DataFrame)
-    - model: A clustering model
-    - n_clusters: Number of clusters used in the model
-    - title: Optional plot title
-    """
-    # Fit the model and get cluster labels
-    #if hasattr(model, "fit_predict"):
-        
-    cluster_labels = model.fit_predict(data_scaled)
-    #else:
-    #    model.fit(X)
-    #    cluster_labels = model.labels_
-
-    silhouette_avg = silhouette_score(data_scaled, cluster_labels)
-    print(f"n_clusters = {n_clusters}, average silhouette_score = {silhouette_avg:.4f}")
-    sample_silhouette_values = silhouette_samples(data_scaled, cluster_labels)
-
-    fig, ax1 = plt.subplots(1, 1)
-    fig.set_size_inches(10, 6)
-
-    ax1.set_xlim([-0.1, 1])
-    ax1.set_ylim([0, len(data_scaled) + (n_clusters + 1) * 10])
-
-    y_lower = 10
-    for i in range(n_clusters):
-        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
-        ith_cluster_silhouette_values.sort()
-
-        size_cluster_i = ith_cluster_silhouette_values.shape[0]
-        y_upper = y_lower + size_cluster_i
-
-        color = cm.nipy_spectral(float(i) / n_clusters)
-        ax1.fill_betweenx(np.arange(y_lower, y_upper),
-                          0, ith_cluster_silhouette_values,
-                          facecolor=color, edgecolor=color, alpha=0.7)
-        ax1.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
-        y_lower = y_upper + 10
-
-    ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
-
-    ax1.set_title(title or f"Silhouette Plot (n_clusters={n_clusters})")
-    ax1.set_xlabel("Silhouette Coefficient Values")
-    ax1.set_ylabel("Cluster Label")
-    ax1.set_yticks([])
-    ax1.set_xticks(np.linspace(-0.1, 1.0, 12))
-
-    plt.tight_layout()
-    plt.show()
-
-def avg_silhouette_score(data: pd.DataFrame) -> float:
-    kmeans = KMeans(n_clusters=10, random_state=42)
-    silhouette_avg = silhouette_score(data, kmeans.fit_predict(data))
-    return silhouette_avg
+    return results'''
 
 
 #######################################
@@ -437,7 +500,7 @@ def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_v
 ############# Mean Shift ##############
 #######################################
 
-def mean_shift_clustering(data: pd.DataFrame, quantile: float, n_samples: int) -> pd.DataFrame:
+'''def mean_shift_clustering(data: pd.DataFrame, quantile: float, n_samples: int) -> pd.DataFrame:
 
     bandwidth = estimate_bandwidth(data, quantile=quantile, n_samples=n_samples)
 
@@ -445,20 +508,50 @@ def mean_shift_clustering(data: pd.DataFrame, quantile: float, n_samples: int) -
 
     data['cluster'] = model.fit_predict(data)
 
-    return data
+    return data'''
 
 #######################################
 ######## Spectral Clustering ##########
 #######################################
 
-def spectral_clustering(data_scaled: pd.DataFrame, data: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
+def spectral_clustering(
+    data: pd.DataFrame,
+    n_clusters: int,
+    exclude_cols: list = None,
+    assign_labels: str = "kmeans",
+    affinity: str = "nearest_neighbors",
+    random_state: int = 42
+) -> pd.DataFrame:
+    """
+    Perform Spectral Clustering on the data, with optional exclusion of columns.
 
-    model = SpectralClustering(n_clusters=n_clusters, affinity='nearest_neighbors', random_state=42)
+    Args:
+        data (pd.DataFrame): Input data for clustering.
+        n_clusters (int): Number of clusters.
+        exclude_cols (list, optional): Columns to exclude from clustering.
+        assign_labels (str): The strategy for assigning labels ('kmeans' or 'discretize').
+        affinity (str): How to construct the affinity matrix ('nearest_neighbors', 'rbf', etc.).
+        random_state (int): Random seed for reproducibility.
 
-    data['cluster'] = model.fit_predict(data_scaled)
-    
+    Returns:
+        pd.DataFrame: DataFrame with a new 'cluster' column.
+    """
+    if exclude_cols is None:
+        exclude_cols = []
+    features = data.drop(columns=exclude_cols, errors='ignore') if exclude_cols else data
 
-    return data
+    model = SpectralClustering(
+        n_clusters=n_clusters,
+        affinity=affinity,
+        assign_labels=assign_labels,
+        random_state=random_state
+    )
+    cluster_labels = model.fit_predict(features)
+
+    result = data.copy()
+    result['cluster'] = cluster_labels
+
+    return result
 
 
 
