@@ -100,21 +100,3 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
     )
 
     fig.show()
-
-def map_visualization(customer_info):
-    fig = px.scatter_mapbox(
-    customer_info,
-    lat='latitude',
-    lon='longitude',
-    zoom=3,
-    height=500
-    )
-
-    # Use a free open-street basemap
-    fig.update_layout(mapbox_style="open-street-map")
-
-    # Remove extra margins
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-
-    # Show in notebook
-    fig.show()

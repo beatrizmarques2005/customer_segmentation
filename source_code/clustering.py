@@ -11,6 +11,7 @@ from sklearn.base import ClusterMixin
 import umap
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
+import plotly.express as px
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, scaled: bool = False) -> pd.DataFrame:
     """
@@ -122,6 +123,29 @@ def cluster_sizes(data: pd.DataFrame, cluster_col: str, show_plot: bool = True) 
         xaxis_title='Cluster',
         yaxis_title='Number of IDs',
         template='plotly_white'
+    )
+    fig.show()
+
+def map_visualization(
+    data: pd.DataFrame,
+    lat_col: str = 'latitude',
+    lon_col: str = 'longitude',
+    zoom: int = 3,
+    height: int = 500,
+    title: str = "Map Visualization"
+) -> None:
+
+    fig = px.scatter_mapbox(
+        data,
+        lat=lat_col,
+        lon=lon_col,
+        zoom=zoom,
+        height=height
+    )
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+        title=title
     )
     fig.show()
 
