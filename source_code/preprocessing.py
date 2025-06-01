@@ -506,10 +506,10 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
 
     fig.show()
 
-def treat_outliers(data: pd.DataFrame) -> pd.DataFrame:
+def treat_outliers(data: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     """
     Remove rows considered outliers based on predefined upper thresholds for specific columns.
-    Returns a DataFrame with outliers removed.
+    Returns a tuple: (DataFrame with outliers removed, DataFrame of removed outliers).
     """
     thresholds = {
         'kids_home': 8,
@@ -534,7 +534,9 @@ def treat_outliers(data: pd.DataFrame) -> pd.DataFrame:
     for col, max_val in thresholds.items():
         if col in data.columns:
             mask &= (data[col].isna() | (data[col] <= max_val))
-    return data[mask].reset_index(drop=True)
+    kept = data[mask].reset_index(drop=True)
+    removed = data[~mask].reset_index(drop=True)
+    return kept, removed
 
 ## Multi Dimensional Outliers --> DBSCAN
 
@@ -562,11 +564,22 @@ def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: in
 
         print(f"With eps = {eps}\n\tNumber of clusters (not outliers): {num_clusters}\n\tTotal number of outliers: {total_outliers}")
 
-def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> pd.DataFrame:
+def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> tuple:
+    """
+    Removes multidimensional outliers detected by DBSCAN and returns both the cleaned and excluded rows.
+
+    Args:
+        customer_info (pd.DataFrame): The input DataFrame.
+        min_samples (int): The minimum number of samples for DBSCAN.
+        eps (float): The epsilon parameter for DBSCAN.
+
+    Returns:
+        tuple: (DataFrame without outliers, DataFrame of excluded outliers)
+    """
     customer_info = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
-    customer_info = customer_info[customer_info['is_outlier_dbscan'] == False]
-    customer_info.drop(columns=['cluster_dbscan', 'is_outlier_dbscan'], inplace=True)
-    return customer_info
+    kept = customer_info[customer_info['is_outlier_dbscan'] == False].drop(columns=['cluster_dbscan', 'is_outlier_dbscan'])
+    excluded = customer_info[customer_info['is_outlier_dbscan'] == True].drop(columns=['cluster_dbscan', 'is_outlier_dbscan'])
+    return kept, excluded
 
 #######################################
 ############ MISSING VALUES ###########
