@@ -12,6 +12,9 @@ import umap
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 import plotly.express as px
+from mlxtend.frequent_patterns import apriori, association_rules
+from mlxtend.preprocessing import TransactionEncoder
+import ast
 
 #################################################################
 ######################### Profile Chart #########################
@@ -100,3 +103,63 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
     )
 
     fig.show()
+
+
+#################################################################
+######################### Apriori Algorithm #####################
+#################################################################
+
+def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster: int) -> pd.DataFrame:
+    '''
+    Transforms the dataset where each column is an item from the cutomer basket that will be used for the Apriori algorithm.
+    Parameters: 
+    - data: customer basket dataset
+    - data_clusters: DataFrame with customer segmentation in clusters
+    - num_cluster: number of the cluster to be transformed
+    Returns:
+     - df_items: DataFrame with true or false for each item in the transaction ready for the Apriori algorithm   
+    '''
+
+    data.set_index('customer_id', inplace=True)
+    items = data.sort_values(by='customer_id')
+
+    clusters = data_clusters[['customer_id', 'cluster']]
+    items_clusters = data.merge(clusters, on='customer_id', how='inner')
+
+    cluster = items_clusters[items_clusters['cluster'] == num_cluster]
+
+    items_list = cluster.list_of_goods.to_list()
+
+    items_list = [ast.literal_eval(item) for item in items_list]
+
+    te = TransactionEncoder()
+    te_ary = te.fit(items_list).transform(items_list)
+    df_items = pd.DataFrame(te_ary, columns=te.columns_)
+
+    return df_items
+
+def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str = 'confidence', confidence_threshold: float= 0.6) -> pd.DataFrame:
+    """
+    Apply the Apriori algorithm to find frequent itemsets and association rules.
+
+    Parameters:
+    - data: DataFrame where each column is an item and each row is a transaction with boolean values (True/False)
+    - min_support: Minimum support for frequent itemsets
+    - metric: Metric to use for association rules 'confidence' or 'lift'
+    - confidence_threshold: Minimum confidence threshold for assosiation rules
+
+    Returns:
+    - DataFrame with association rules
+    """
+    frequent_itemsets = apriori(data, min_support=min_support, use_colnames=True)
+
+    rules = association_rules(frequent_itemsets, metric=metric, min_threshold=confidence_threshold)
+
+    return frequent_itemsets, rules
+
+
+
+
+
+
+
