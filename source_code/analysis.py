@@ -15,6 +15,7 @@ import plotly.express as px
 from mlxtend.frequent_patterns import apriori, association_rules
 from mlxtend.preprocessing import TransactionEncoder
 import ast
+from pyECLAT import ECLAT
 
 #################################################################
 ######################### Profile Chart #########################
@@ -106,7 +107,7 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
 
 
 #################################################################
-######################### Apriori Algorithm #####################
+######################### Assosiation Rules #####################
 #################################################################
 
 def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster: int) -> pd.DataFrame:
@@ -136,7 +137,7 @@ def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster
     te_ary = te.fit(items_list).transform(items_list)
     df_items = pd.DataFrame(te_ary, columns=te.columns_)
 
-    return df_items
+    return df_items, items_list
 
 def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str = 'confidence', confidence_threshold: float= 0.6) -> pd.DataFrame:
     """
@@ -157,6 +158,32 @@ def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str 
 
     return frequent_itemsets, rules
 
+def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_support: float = 0.2) -> pd.DataFrame:
+    """
+    Apply the Eclat algorithm to find support of items.
+
+    Parameters:
+    - lt: List of transactions, where each transaction is a list of items
+    - min_combintion: Minimum number of items in a combination
+    - max_combination: Maximum number of items in a combination
+    - min_support: Minimum support for frequent itemsets
+
+    Returns:
+    - DataFrame with frequent itemsets nd their support
+    """
+    eclat = ECLAT(data=pd.DataFrame(lt))
+
+    items_rules_indexes, items_rules_supports = eclat.fit(min_support=min_support,min_combination=min_combination, max_combination=max_combination)
+
+    rules_eclat_groceries = pd.DataFrame(
+    list(items_rules_supports.values()),
+    index=list(items_rules_supports.keys()),
+    columns=['support']
+    )
+
+    rules_eclat_groceries.sort_values(by='support', ascending=False, inplace=True)
+
+    return rules_eclat_groceries
 
 
 
