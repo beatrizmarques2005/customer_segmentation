@@ -9,6 +9,7 @@ import matplotlib.cm as cm
 from sklearn.metrics import silhouette_samples, silhouette_score
 from sklearn.base import ClusterMixin
 import umap
+import plotly.subplots as sp
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 import plotly.express as px
@@ -185,8 +186,108 @@ def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_su
 
     return rules_eclat_groceries
 
+#################################################################
+######################### Radar Chart ###########################
+#################################################################
+
+#This radar (spider) chart provides a visual summary of how different clusters compare across multiple numerical variables. Each axis represents a feature,
+# and each cluster is plotted as a closed line connecting the average value of that cluster on each feature.
+
+def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Cluster', exclude=None):
+    """
+    Plots an interactive radar chart using Plotly, showing mean values per cluster.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame with numeric columns and a cluster column.
+        cluster_col (str): Column indicating cluster membership.
+        title (str): Title for the radar chart.
+        exclude (list of str, optional): Columns to exclude from the plot.
+    """
+    if exclude is None:
+        exclude = []
+
+    # Step 1: Select numeric columns excluding the cluster column and any excluded columns
+    numeric_cols = df.select_dtypes(include=np.number).columns
+    numeric_cols = [col for col in numeric_cols if col != cluster_col and col not in exclude]
+
+    if not numeric_cols:
+        raise ValueError("No numeric columns remaining after exclusion.")
+
+    # Step 2: Compute cluster means
+    cluster_means = df.groupby(cluster_col)[numeric_cols].mean()
+
+    # Step 3: Prepare plotly figure
+    fig = go.Figure()
+
+    for cluster in cluster_means.index:
+        values = cluster_means.loc[cluster].tolist()
+        values += values[:1]  # close the loop
+        categories = numeric_cols + [numeric_cols[0]]  # close the loop
+
+        fig.add_trace(go.Scatterpolar(
+            r=values,
+            theta=categories,
+            mode='lines+markers',
+            name=f'Cluster {cluster}',
+            hovertemplate='%{theta}: %{r:.2f}<extra>Cluster ' + str(cluster) + '</extra>'
+        ))
+
+    fig.update_layout(
+        title=title,
+        width=1200,
+        height=800,
+        polar=dict(
+            radialaxis=dict(visible=True)
+        ),
+        showlegend=True
+    )
+
+    fig.show()
 
 
+def plot_cluster_boxplots(df, cluster_col, variables, ncols=2, title='Clustered Boxplots'):
+    """
+    Creates interactive boxplots of multiple variables by cluster using Plotly.
 
+    Args:
+        df (pd.DataFrame): DataFrame containing the data.
+        cluster_col (str): Column name indicating cluster/group.
+        variables (list of str): List of numeric variables to plot.
+        ncols (int): Number of columns in subplot grid.
+        title (str): Main title of the plot.
+    """
+    n_vars = len(variables)
+    nrows = -(-n_vars // ncols)  # ceiling division
 
+    fig = sp.make_subplots(rows=nrows, cols=ncols, subplot_titles=variables)
+
+    for i, var in enumerate(variables):
+        row = i // ncols + 1
+        col = i % ncols + 1
+        for cluster in sorted(df[cluster_col].unique()):
+            cluster_data = df[df[cluster_col] == cluster][var]
+            fig.add_trace(
+                go.Box(
+                    y=cluster_data,
+                    name=f'{cluster}',
+                    boxpoints='outliers',
+                    marker_color=None,
+                    showlegend=(i == 0),
+                    legendgroup=f'Cluster {cluster}',
+                    hoverinfo='y+name',
+                ),
+                row=row, col=col
+            )
+        fig.update_xaxes(title_text='Cluster', row=row, col=col)
+        fig.update_yaxes(title_text=var, row=row, col=col)
+
+    fig.update_layout(
+        height=300 * nrows,
+        width=500 * ncols,
+        title_text=title,
+        boxmode='group',
+        showlegend=True
+    )
+
+    fig.show()
 
