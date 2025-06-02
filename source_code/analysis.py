@@ -244,50 +244,139 @@ def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Clus
 
     fig.show()
 
+#################################################################
+######################### Multi Boxplot #########################
+#################################################################
 
-def plot_cluster_boxplots(df, cluster_col, variables, ncols=2, title='Clustered Boxplots'):
+#Function to create interactive boxplots of one variable at a time by cluster using Plotly dropdowns.
+
+def plot_cluster_boxplots_dropdown(df, cluster_col, exclude=None, title='Clustered Boxplots'):
     """
-    Creates interactive boxplots of multiple variables by cluster using Plotly.
+    Creates interactive boxplots of one variable at a time by cluster using Plotly dropdowns.
 
     Args:
         df (pd.DataFrame): DataFrame containing the data.
         cluster_col (str): Column name indicating cluster/group.
         variables (list of str): List of numeric variables to plot.
-        ncols (int): Number of columns in subplot grid.
         title (str): Main title of the plot.
     """
-    n_vars = len(variables)
-    nrows = -(-n_vars // ncols)  # ceiling division
 
-    fig = sp.make_subplots(rows=nrows, cols=ncols, subplot_titles=variables)
+    if exclude is None:
+        exclude = []
 
-    for i, var in enumerate(variables):
-        row = i // ncols + 1
-        col = i % ncols + 1
-        for cluster in sorted(df[cluster_col].unique()):
-            cluster_data = df[df[cluster_col] == cluster][var]
+    variables = df.select_dtypes(include=np.number).columns
+    variables = [col for col in variables if col != cluster_col and col not in exclude]
+
+    fig = go.Figure()
+    cluster_labels = sorted(df[cluster_col].unique())
+
+    # Create one trace per variable per cluster (but set only first variable visible)
+    for var_index, var in enumerate(variables):
+        for cluster in cluster_labels:
+            cluster_data = df[df[cluster_col] == cluster]
+            visible = (var_index == 0)
+
             fig.add_trace(
                 go.Box(
-                    y=cluster_data,
-                    name=f'{cluster}',
+                    y=cluster_data[var],
+                    x=[str(cluster)] * len(cluster_data),
+                    name=f'Cluster {cluster}',
                     boxpoints='outliers',
-                    marker_color=None,
-                    showlegend=(i == 0),
+                    marker=dict(opacity=0.7),
+                    hovertemplate=f'{var}<br>Cluster: {cluster}<br>Value: %{{y}}<extra></extra>',
                     legendgroup=f'Cluster {cluster}',
-                    hoverinfo='y+name',
-                ),
-                row=row, col=col
+                    showlegend=True,
+                    visible=visible
+                )
             )
-        fig.update_xaxes(title_text='Cluster', row=row, col=col)
-        fig.update_yaxes(title_text=var, row=row, col=col)
+
+    # Create dropdown buttons
+    buttons = []
+    n_clusters = len(cluster_labels)
+
+    for i, var in enumerate(variables):
+        visibility = [False] * len(variables) * n_clusters
+        for j in range(n_clusters):
+            visibility[i * n_clusters + j] = True
+
+        buttons.append(dict(
+            label=var,
+            method='update',
+            args=[
+                {'visible': visibility},
+                {
+                    'yaxis': {'title': var},
+                    'title': f'{title} - {var}'
+                }
+            ]
+        ))
 
     fig.update_layout(
-        height=300 * nrows,
-        width=500 * ncols,
-        title_text=title,
+        updatemenus=[dict(
+            active=0,
+            buttons=buttons,
+            direction='down',
+            x=0.60,
+            y=1.10,
+            xanchor='left',
+            yanchor='top',
+            showactive=True
+        )],
+        title=f'{title} - {variables[0]}',
+        yaxis_title=variables[0],
         boxmode='group',
-        showlegend=True
+        height=800,
+        width=1200
     )
 
     fig.show()
 
+#################################################################
+############### Profile Comparison Line Version #################
+#################################################################
+
+#Function that creates an interactive line plot comparing mean profiles of clusters across given variables.
+
+def plot_line_comparing_profiles(df, cluster_col, exclude=None, title='Comparing Cluster Profiles (Line Plot)'):
+    """
+    Creates an interactive line plot comparing mean profiles of clusters across given variables.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the data.
+        cluster_col (str): Column name indicating cluster/group.
+        variables (list of str): List of numeric variables to compare.
+        title (str): Title of the plot.
+    """
+    if exclude is None:
+        exclude = []
+
+    variables = df.select_dtypes(include=np.number).columns
+    variables = [col for col in variables if col != cluster_col and col not in exclude]
+
+    # Compute mean profiles
+    cluster_means = df.groupby(cluster_col)[variables].mean()
+
+    fig = go.Figure()
+
+    # Loop over clusters
+    for cluster in cluster_means.index:
+        values = cluster_means.loc[cluster]
+        fig.add_trace(go.Scatter(
+            x=variables,
+            y=values,
+            mode='lines+markers',
+            name=f'Cluster {cluster}',
+            hovertemplate='<b>%{x}</b><br>Value: %{y:.2f}<extra>Cluster ' + str(cluster) + '</extra>',
+        ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title='Variables',
+        yaxis_title='Mean Value',
+        height=800,
+        width=1200,
+        hovermode='x unified',
+        legend_title='Clusters'
+    )
+
+    fig.show()
