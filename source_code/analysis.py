@@ -380,3 +380,66 @@ def plot_line_comparing_profiles(df, cluster_col, exclude=None, title='Comparing
     )
 
     fig.show()
+
+#################################################################
+######### Ratio of Total Individuals with Total Spent ###########
+#################################################################
+
+#This function creates an interactive grouped bar chart using Plotly that compares the percentage distribution of individuals and total lifetime spend across clusters, 
+#and annotates each cluster with the ratio of spend percentage to individual percentage, allowing for easy visual comparison of relative value contribution per cluster.
+
+def plot_cluster_bars_percent(df, cluster_col='cluster', spend_cols=None):
+    if spend_cols is None:
+        spend_cols = [col for col in df.columns if col != cluster_col and df[col].dtype in ['float64', 'int64']]
+
+    # Compute total spend per individual
+    df = df.copy()
+    df['total_spend'] = df[spend_cols].sum(axis=1)
+
+    # Group by cluster
+    grouped = df.groupby(cluster_col)['total_spend'].agg(['count', 'sum']).reset_index()
+    grouped.columns = [cluster_col, 'individuals', 'total_spend']
+
+    # Normalize to percent
+    grouped['individuals_pct'] = grouped['individuals'] / grouped['individuals'].sum() * 100
+    grouped['spend_pct'] = grouped['total_spend'] / grouped['total_spend'].sum() * 100
+    grouped['ratio'] = grouped['spend_pct'] / grouped['individuals_pct']
+
+    x_vals = grouped[cluster_col].astype(str)
+
+    # Create bar traces
+    trace_individuals = go.Bar(
+        x=x_vals,
+        y=grouped['individuals_pct'],
+        name='% Individuals',
+        marker_color='steelblue'
+    )
+    trace_spend = go.Bar(
+        x=x_vals,
+        y=grouped['spend_pct'],
+        name='% Total Spend',
+        marker_color='orange'
+    )
+
+    # Ratio annotations
+    annotations = []
+    for i, row in grouped.iterrows():
+        y_pos = max(row['individuals_pct'], row['spend_pct']) + 2
+        annotations.append(dict(
+            x=str(row[cluster_col]),
+            y=y_pos,
+            text=f"Ratio: {row['ratio']:.2f}",
+            showarrow=False,
+            font=dict(size=11)
+        ))
+
+    layout = go.Layout(
+        title='Cluster Comparison (% of Total Individuals and Spend)',
+        xaxis=dict(title='Cluster'),
+        yaxis=dict(title='Percentage'),
+        barmode='group',
+        annotations=annotations
+    )
+
+    fig = go.Figure(data=[trace_individuals, trace_spend], layout=layout)
+    fig.show()
