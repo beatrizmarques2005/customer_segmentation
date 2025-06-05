@@ -29,10 +29,12 @@ def compute_average_multi(df, cluster_column):
     Compute average values for each cluster and the entire dataset.
 
     Parameters:
+    ----------
     - df: pandas DataFrame
     - cluster_column: name of the column that identifies clusters (e.g., 'cluster')
 
     Returns:
+    -------
     - variables: list of variable names
     - cluster_averages: DataFrame where each row is a cluster and columns are mean values
     - database_avg: list of mean values for the entire dataset
@@ -57,9 +59,15 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
     Database average is shown as a slightly larger dot.
 
     Parameters:
+    ----------
     - variables: list of variable names
     - cluster_averages: DataFrame (rows = clusters, columns = variables)
     - database_avg: list of overall averages for each variable
+
+    Returns:
+    -------
+    None
+        Displays an interactive Plotly profile plot. No object is returned.
     """
     # Create database average DataFrame
     df_database = pd.DataFrame({
@@ -114,11 +122,15 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
 def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster: int) -> pd.DataFrame:
     '''
     Transforms the dataset where each column is an item from the cutomer basket that will be used for the Apriori algorithm.
-    Parameters: 
+
+    Parameters:
+    ----------
     - data: customer basket dataset
     - data_clusters: DataFrame with customer segmentation in clusters
     - num_cluster: number of the cluster to be transformed
+
     Returns:
+    -------
      - df_items: DataFrame with true or false for each item in the transaction ready for the Apriori algorithm   
     '''
 
@@ -145,12 +157,14 @@ def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str 
     Apply the Apriori algorithm to find frequent itemsets and association rules.
 
     Parameters:
+    ----------
     - data: DataFrame where each column is an item and each row is a transaction with boolean values (True/False)
     - min_support: Minimum support for frequent itemsets
     - metric: Metric to use for association rules 'confidence' or 'lift'
     - confidence_threshold: Minimum confidence threshold for assosiation rules
 
     Returns:
+    -------
     - DataFrame with association rules
     """
     frequent_itemsets = apriori(data, min_support=min_support, use_colnames=True)
@@ -164,12 +178,14 @@ def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_su
     Apply the Eclat algorithm to find support of items.
 
     Parameters:
+    ----------
     - lt: List of transactions, where each transaction is a list of items
     - min_combintion: Minimum number of items in a combination
     - max_combination: Maximum number of items in a combination
     - min_support: Minimum support for frequent itemsets
 
     Returns:
+    -------
     - DataFrame with frequent itemsets nd their support
     """
     eclat = ECLAT(data=pd.DataFrame(lt))
@@ -195,13 +211,38 @@ def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_su
 
 def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Cluster', exclude=None):
     """
-    Plots an interactive radar chart using Plotly, showing mean values per cluster.
+    Generates an interactive radar (spider) chart to compare the mean profiles of different clusters 
+    across multiple numeric features.
 
-    Args:
-        df (pd.DataFrame): Input DataFrame with numeric columns and a cluster column.
-        cluster_col (str): Column indicating cluster membership.
-        title (str): Title for the radar chart.
-        exclude (list of str, optional): Columns to exclude from the plot.
+    Each axis of the radar chart represents a numeric variable, and each cluster is visualized 
+    as a closed line connecting the mean values of that cluster for all selected features. This 
+    visualization is useful for understanding how clusters differ in terms of variable magnitude 
+    and shape.
+
+    Parameters:
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame containing numeric variables and a column indicating cluster assignments.
+
+    cluster_col : str, optional (default='cluster')
+        Name of the column that defines the cluster or group label for each observation.
+
+    title : str, optional (default='Radar Chart by Cluster')
+        Title for the radar chart.
+
+    exclude : list of str, optional (default=None)
+        List of column names to exclude from the analysis. Commonly used to omit identifiers, 
+        target variables, or any columns that should not be plotted.
+
+    Raises:
+    ------
+    ValueError
+        If no numeric columns remain after applying the exclusions.
+
+    Returns:
+    -------
+    None
+        Displays an interactive Plotly radar chart. Does not return a value.
     """
     if exclude is None:
         exclude = []
@@ -252,13 +293,33 @@ def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Clus
 
 def plot_cluster_boxplots_dropdown(df, cluster_col, exclude=None, title='Clustered Boxplots'):
     """
-    Creates interactive boxplots of one variable at a time by cluster using Plotly dropdowns.
+    Generates interactive boxplots for numeric variables across clusters, allowing users 
+    to switch between variables using a dropdown menu.
 
-    Args:
-        df (pd.DataFrame): DataFrame containing the data.
-        cluster_col (str): Column name indicating cluster/group.
-        variables (list of str): List of numeric variables to plot.
-        title (str): Main title of the plot.
+    This function creates a set of boxplots for each numeric variable (excluding the specified 
+    ones and the cluster column), grouped by cluster. A dropdown menu is added to allow 
+    interactive exploration of one variable at a time, facilitating comparison of distributions 
+    across clusters.
+
+    Parameters:
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame containing the clustering information and the numeric variables to plot.
+
+    cluster_col : str
+        Name of the column representing the cluster or group label.
+
+    exclude : list of str, optional (default=None)
+        List of column names to exclude from plotting. Useful for ignoring identifier or 
+        target columns. If None, only the cluster column is excluded.
+
+    title : str, optional (default='Clustered Boxplots')
+        Title for the overall plot. The selected variable name will be appended dynamically.
+
+    Returns:
+    -------
+    None
+        Displays an interactive Plotly boxplot chart. Does not return a value.
     """
 
     if exclude is None:
@@ -339,13 +400,32 @@ def plot_cluster_boxplots_dropdown(df, cluster_col, exclude=None, title='Cluster
 
 def plot_line_comparing_profiles(df, cluster_col, exclude=None, title='Comparing Cluster Profiles (Line Plot)'):
     """
-    Creates an interactive line plot comparing mean profiles of clusters across given variables.
+    Generates an interactive line plot to compare the average profiles of different clusters 
+    across a set of numeric variables.
 
-    Args:
-        df (pd.DataFrame): DataFrame containing the data.
-        cluster_col (str): Column name indicating cluster/group.
-        variables (list of str): List of numeric variables to compare.
-        title (str): Title of the plot.
+    This function computes the mean values of selected numeric variables for each cluster 
+    and visualizes them as separate lines, allowing for easy comparison of cluster behavior 
+    across features. Variables can be optionally excluded from the plot.
+
+    Parameters:
+    ----------
+    df : pandas.DataFrame
+        The input DataFrame containing both the cluster assignments and the variables to compare.
+
+    cluster_col : str
+        The name of the column indicating the cluster label or group membership for each observation.
+
+    exclude : list of str, optional (default=None)
+        List of column names to exclude from the analysis (e.g., identifiers, target variables, etc.).
+        If None, only the cluster column will be excluded.
+
+    title : str, optional (default='Comparing Cluster Profiles (Line Plot)')
+        Title for the resulting plot.
+
+    Returns:
+    -------
+    None
+        Displays an interactive Plotly line chart. Does not return a value.
     """
     if exclude is None:
         exclude = []
@@ -389,6 +469,33 @@ def plot_line_comparing_profiles(df, cluster_col, exclude=None, title='Comparing
 #and annotates each cluster with the ratio of spend percentage to individual percentage, allowing for easy visual comparison of relative value contribution per cluster.
 
 def plot_cluster_bars_percent(df, cluster_col='cluster', spend_cols=None):
+    """
+    Generates an interactive grouped bar chart comparing the percentage distribution 
+    of individuals and total lifetime spend across clusters.
+
+    The function computes the total spend per individual, aggregates it by cluster, 
+    and calculates the percentage share of individuals and spend for each cluster. 
+    It also computes and annotates the ratio of spend percentage to individual 
+    percentage, offering insight into the relative value contribution of each cluster.
+
+    Parameters:
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame containing individual-level data, including clustering labels 
+        and spend-related columns.
+
+    cluster_col : str, optional (default='cluster')
+        Name of the column in `df` that identifies the cluster label for each individual.
+
+    spend_cols : list of str, optional (default=None)
+        List of column names representing spend metrics to be summed per individual. 
+        If None, all numeric columns except the cluster column will be used.
+
+    Returns:
+    -------
+    None
+        Displays an interactive Plotly bar chart. No object is returned.
+    """
     if spend_cols is None:
         spend_cols = [col for col in df.columns if col != cluster_col and df[col].dtype in ['float64', 'int64']]
 
