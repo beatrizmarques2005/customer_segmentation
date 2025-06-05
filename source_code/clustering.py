@@ -149,6 +149,14 @@ def map_visualization(
     )
     fig.show()
 
+def reassign_cluster(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.DataFrame, num_cluster: int, num_new_cluster: int):
+    cluster_name = data_clusters[data_clusters['cluster'] == num_cluster].reset_index(drop=True)
+    cluster_name_notscaled = data_cluster_notscaled[data_cluster_notscaled['cluster'] == num_cluster].reset_index(drop=True)
+    cluster_name['cluster'] = num_new_cluster
+    cluster_name_notscaled['cluster'] = num_new_cluster
+    return cluster_name, cluster_name_notscaled
+    
+
 #######################################
 ############ HIERARCHICAL #############
 #######################################
