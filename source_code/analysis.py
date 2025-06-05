@@ -122,15 +122,11 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
 def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster: int) -> pd.DataFrame:
     '''
     Transforms the dataset where each column is an item from the cutomer basket that will be used for the Apriori algorithm.
-
-    Parameters:
-    ----------
+    Parameters: 
     - data: customer basket dataset
     - data_clusters: DataFrame with customer segmentation in clusters
     - num_cluster: number of the cluster to be transformed
-
     Returns:
-    -------
      - df_items: DataFrame with true or false for each item in the transaction ready for the Apriori algorithm   
     '''
 
@@ -157,14 +153,12 @@ def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str 
     Apply the Apriori algorithm to find frequent itemsets and association rules.
 
     Parameters:
-    ----------
     - data: DataFrame where each column is an item and each row is a transaction with boolean values (True/False)
     - min_support: Minimum support for frequent itemsets
     - metric: Metric to use for association rules 'confidence' or 'lift'
     - confidence_threshold: Minimum confidence threshold for assosiation rules
 
     Returns:
-    -------
     - DataFrame with association rules
     """
     frequent_itemsets = apriori(data, min_support=min_support, use_colnames=True)
@@ -178,14 +172,12 @@ def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_su
     Apply the Eclat algorithm to find support of items.
 
     Parameters:
-    ----------
     - lt: List of transactions, where each transaction is a list of items
     - min_combintion: Minimum number of items in a combination
     - max_combination: Maximum number of items in a combination
     - min_support: Minimum support for frequent itemsets
 
     Returns:
-    -------
     - DataFrame with frequent itemsets nd their support
     """
     eclat = ECLAT(data=pd.DataFrame(lt))

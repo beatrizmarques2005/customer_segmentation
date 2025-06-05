@@ -3,6 +3,7 @@ from minisom import MiniSom
 import pandas as pd
 from sklearn.cluster import estimate_bandwidth
 from scipy.cluster.hierarchy import dendrogram
+from scipy.spatial.distance import cdist
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -155,7 +156,25 @@ def reassign_cluster(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.Dat
     cluster_name['cluster'] = num_new_cluster
     cluster_name_notscaled['cluster'] = num_new_cluster
     return cluster_name, cluster_name_notscaled
+
+def find_cluster_exlude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
+    '''Find the cluster for each data point (customer) that was deleted from the original dataset. 
+    Parameters:
+    - 
+    - data_exclude: DataFrame with the data points that were excluded from the original dataset without the Makro cluster
+    - exclude_cols: list of columns to exclude from the distance calculation
+    Returns:
+    - DataFrame where each excluded point is assigned a cluster based on the final clustering'''
     
+    feature_cols_for_distance = [col for col in data.columns if col not in exclude_cols + ['cluster']]
+    centroids= data.groupby('cluster')[feature_cols_for_distance].mean().values
+    excluded_features = data_excluded[feature_cols_for_distance].values
+    distances = cdist(excluded_features, centroids)
+    closest_clusters = distances.argmin(axis=1)
+    excluded_ids_no_makro_with_cluster = data_excluded.copy()
+    excluded_ids_no_makro_with_cluster['cluster'] = closest_clusters
+
+    return excluded_ids_no_makro_with_cluster
 
 #######################################
 ############ HIERARCHICAL #############
@@ -585,7 +604,68 @@ def spectral_clustering(
 
     return result
 
+########################################
+############### TSNE ##################
+########################################
 
+def visualize_dimensionality_reduction(transformation, targets):
+    '''
+    Visualizes the results of dimensionality reduction. This function is taken from prof. Ivo's lecture notes.
+    Parameters:
+     - transformation: The result of dimensionality reduction, PCA, t-SNE, UMAP, etc.
+     - targets: The target labels for the data points.
+    '''
+    df = pd.DataFrame({
+        'Dim1': transformation[:, 0],
+        'Dim2': transformation[:, 1],
+        'Class': targets
+    })
+
+    fig = px.scatter(
+        df,
+        x='Dim1',
+        y='Dim2',
+        color='Class',
+        title='2D Dimensionality Reduction Visualization',
+        labels={'Class': 'Target Class'},
+        color_discrete_sequence=px.colors.qualitative.Set3
+    )
+
+    fig.update_traces(marker=dict(size=6, opacity=0.7),
+                      selector=dict(mode='markers'))
+
+    fig.update_layout(legend_title='Classes')
+    fig.show()
+
+#########################################
+############### PCA #####################
+#########################################
+
+def plot_pca_clusters_interactive(pca_data, cluster_labels):
+    """
+    Creates an interactive scatter plot of PCA components colored by cluster.
+
+    Parameters:
+    - pca_data: numpy array or 2D list of shape (n_samples, 2), the PCA-transformed data
+    - cluster_labels: list or array of cluster labels corresponding to each point
+    """
+    df = pd.DataFrame({
+        'PC1': pca_data[:, 0],
+        'PC2': pca_data[:, 1],
+        'Cluster': cluster_labels
+    })
+
+    fig = px.scatter(
+        df,
+        x='PC1',
+        y='PC2',
+        color='Cluster',
+        title='Wholesale Customer Segments (PCA Projection)',
+        labels={'PC1': 'Principal Component 1', 'PC2': 'Principal Component 2'},
+        width=800,
+        height=600
+    )
+    fig.show()
 
 '''
 # SOM
