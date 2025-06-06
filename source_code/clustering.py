@@ -1,18 +1,19 @@
-from sklearn.cluster import AgglomerativeClustering, KMeans, DBSCAN, MeanShift, SpectralClustering
+from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from minisom import MiniSom
 import pandas as pd
-from sklearn.cluster import estimate_bandwidth
+#from sklearn.cluster import estimate_bandwidth
 from scipy.cluster.hierarchy import dendrogram
 from scipy.spatial.distance import cdist
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
+#import matplotlib.cm as cm
 from sklearn.metrics import silhouette_samples, silhouette_score
-from sklearn.base import ClusterMixin
+#from sklearn.base import ClusterMixin
 import umap
 import plotly.graph_objects as go
-from sklearn.decomposition import PCA
+#from sklearn.decomposition import PCA
 import plotly.express as px
+from scipy.spatial.distance import cdist
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, scaled: bool = False) -> pd.DataFrame:
     """
@@ -150,12 +151,31 @@ def map_visualization(
     )
     fig.show()
 
-def reassign_cluster(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.DataFrame, num_cluster: int, num_new_cluster: int):
+'''def reassign_cluster(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.DataFrame, num_cluster: int, num_new_cluster: int):
     cluster_name = data_clusters[data_clusters['cluster'] == num_cluster].reset_index(drop=True)
     cluster_name_notscaled = data_cluster_notscaled[data_cluster_notscaled['cluster'] == num_cluster].reset_index(drop=True)
     cluster_name['cluster'] = num_new_cluster
     cluster_name_notscaled['cluster'] = num_new_cluster
     return cluster_name, cluster_name_notscaled
+'''
+
+def reassign_clusters(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.DataFrame, dict_num_cluster: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Reassigns cluster labels in both scaled and unscaled DataFrames based on a mapping dictionary.
+
+    Args:
+        data_clusters (pd.DataFrame): DataFrame with cluster assignments (scaled).
+        data_cluster_notscaled (pd.DataFrame): DataFrame with cluster assignments (not scaled).
+        dict_num_cluster (dict): Mapping from old cluster numbers to new cluster numbers.
+
+    Returns:
+        tuple[pd.DataFrame, pd.DataFrame]: DataFrames with updated cluster labels.
+    """
+    data_clusters = data_clusters.copy()
+    data_cluster_notscaled = data_cluster_notscaled.copy()
+    data_clusters['cluster'] = data_clusters['cluster'].replace(dict_num_cluster)
+    data_cluster_notscaled['cluster'] = data_cluster_notscaled['cluster'].replace(dict_num_cluster)
+    return data_clusters, data_cluster_notscaled
 
 def find_cluster_exlude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
     '''Find the cluster for each data point (customer) that was deleted from the original dataset. 
@@ -175,6 +195,43 @@ def find_cluster_exlude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exc
     excluded_ids_no_makro_with_cluster['cluster'] = closest_clusters
 
     return excluded_ids_no_makro_with_cluster
+
+def assign_excluded_ids_to_clusters(excluded_ids_no_makro: pd.DataFrame, clustering: pd.DataFrame) -> pd.DataFrame:
+    """
+    Assign clusters to excluded_ids_no_makro based on the nearest centroid from clustering.
+
+    Parameters:
+    excluded_ids_no_makro (DataFrame): DataFrame containing the excluded IDs without Makro.
+    clustering (DataFrame): DataFrame containing the clustering results with centroids.
+
+    Returns:
+    DataFrame: Updated DataFrame with cluster assignments for excluded IDs.
+    """
+
+    if excluded_ids_no_makro.empty or clustering.empty:
+        raise ValueError("Input DataFrames cannot be empty.")
+
+    if 'cluster' not in clustering.columns:
+        raise ValueError("'cluster' column is missing in clustering.")
+
+    exclude_cols = ['customer_id', 'has_loyalty_card', 'longitude', 'latitude', 'gender']
+
+    feature_cols_for_distance = [col for col in clustering.columns if col not in exclude_cols + ['cluster']]
+
+    centroids = clustering.groupby('cluster')[feature_cols_for_distance].mean().values
+
+    # The typo was here: .valuesance.values should be .values
+    excluded_ids_features = excluded_ids_no_makro[feature_cols_for_distance].values
+
+    # assign each row to the nearest centroid
+    distances = cdist(excluded_ids_features, centroids)
+    closest_clusters = distances.argmin(axis=1)
+
+    excluded_ids_no_makro_with_cluster = excluded_ids_no_makro.copy()
+    excluded_ids_no_makro_with_cluster['cluster'] = closest_clusters
+
+    return excluded_ids_no_makro_with_cluster
+
 
 #######################################
 ############ HIERARCHICAL #############
@@ -389,46 +446,21 @@ def plot_silhouette(data: pd.DataFrame, cluster_col: str, exclude_cols: list = N
     fig = go.Figure(data=traces, layout=layout)
     fig.show()
 
-'''def plot_elbow_kmeans(data: pd.DataFrame) -> None:s
-
-
-    dispersion = []
-    for k in range(1, 50):
-        kmeans = KMeans(n_clusters=k, random_state=0).fit(data)
-        dispersion.append(kmeans.inertia_)
-
-    plt.plot(range(1, 50), dispersion, marker='o')
-    plt.xlabel('Number of clusters')
-    plt.ylabel('Dispersion (inertia)')
-    plt.show()'''
-
-'''def test_multiple_clusters(data_scaled: pd.DataFrame, k_range: range, ):
-    results = []
-
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, random_state=42)
-        labels = kmeans.fit_predict(data_scaled)
-        avg_score = silhouette_score(data_scaled, labels)
-        print(f"k = {k}, silhouette score = {avg_score:.4f}")
-        results.append((k, avg_score))
-
-    return results'''
-
 
 #######################################
 ################ SOM ##################
 #######################################
 
 def som(data_np: np.ndarray,
-                                        data: pd.DataFrame, 
-                                        x: int, 
-                                        y: int, 
-                                        input_len: int, 
-                                        sigma: float = 0.5,
-                                        learning_rate: float = 1,
-                                        neighborhood_function: str ='gaussian', 
-                                        random_seed: int = 42,
-                                        number_of_iterations: int = 1000) -> MiniSom:
+    data: pd.DataFrame, 
+    x: int, 
+    y: int, 
+    input_len: int, 
+    sigma: float = 0.5,
+    learning_rate: float = 1,
+    neighborhood_function: str ='gaussian', 
+    random_seed: int = 42,
+    number_of_iterations: int = 1000) -> MiniSom:
     """
     Train a Self-Organizing Map (SOM) using the given data.
 
@@ -548,20 +580,6 @@ def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_v
 
 
 #######################################
-############# Mean Shift ##############
-#######################################
-
-'''def mean_shift_clustering(data: pd.DataFrame, quantile: float, n_samples: int) -> pd.DataFrame:
-
-    bandwidth = estimate_bandwidth(data, quantile=quantile, n_samples=n_samples)
-
-    model = MeanShift(bandwidth=bandwidth)
-
-    data['cluster'] = model.fit_predict(data)
-
-    return data'''
-
-#######################################
 ######## Spectral Clustering ##########
 #######################################
 
@@ -605,7 +623,7 @@ def spectral_clustering(
     return result
 
 ########################################
-############### TSNE ##################
+############### TSNE ###################
 ########################################
 
 def visualize_dimensionality_reduction(transformation, targets):
@@ -635,36 +653,6 @@ def visualize_dimensionality_reduction(transformation, targets):
                       selector=dict(mode='markers'))
 
     fig.update_layout(legend_title='Classes')
-    fig.show()
-
-#########################################
-############### PCA #####################
-#########################################
-
-def plot_pca_clusters_interactive(pca_data, cluster_labels):
-    """
-    Creates an interactive scatter plot of PCA components colored by cluster.
-
-    Parameters:
-    - pca_data: numpy array or 2D list of shape (n_samples, 2), the PCA-transformed data
-    - cluster_labels: list or array of cluster labels corresponding to each point
-    """
-    df = pd.DataFrame({
-        'PC1': pca_data[:, 0],
-        'PC2': pca_data[:, 1],
-        'Cluster': cluster_labels
-    })
-
-    fig = px.scatter(
-        df,
-        x='PC1',
-        y='PC2',
-        color='Cluster',
-        title='Wholesale Customer Segments (PCA Projection)',
-        labels={'PC1': 'Principal Component 1', 'PC2': 'Principal Component 2'},
-        width=800,
-        height=600
-    )
     fig.show()
 
 '''
