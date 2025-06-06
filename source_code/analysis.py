@@ -24,20 +24,30 @@ from pyECLAT import ECLAT
 
 # Computing necessary parameters for profile chart
 
-def compute_average_multi(df, cluster_column):
+def compute_average_multi(df: pd.DataFrame, cluster_column: str) -> tuple[list[str], pd.DataFrame, list[float]]:
     """
-    Compute average values for each cluster and the entire dataset.
+    Computes the average values of numerical variables for each cluster 
+    and for the entire dataset.
 
-    Parameters:
+    Parameters
     ----------
-    - df: pandas DataFrame
-    - cluster_column: name of the column that identifies clusters (e.g., 'cluster')
+    df : pandas.DataFrame
+        The dataset containing customer features and cluster assignments.
+    cluster_column : str
+        The name of the column in `df` that indicates cluster labels 
+        (e.g., 'cluster').
 
-    Returns:
+    Returns
     -------
-    - variables: list of variable names
-    - cluster_averages: DataFrame where each row is a cluster and columns are mean values
-    - database_avg: list of mean values for the entire dataset
+    variables : list of str
+        List of feature/variable names used in the averaging (excluding 
+        the cluster and customer ID columns).
+    cluster_averages : pandas.DataFrame
+        A DataFrame where each row corresponds to a cluster and each column 
+        contains the mean value of a feature within that cluster.
+    database_avg : list of float
+        A list of mean values for each variable across the entire dataset 
+        (not grouped by cluster).
     """
 
     # Exclude the cluster column to get only variable columns
@@ -53,21 +63,28 @@ def compute_average_multi(df, cluster_column):
 
 # Plotting the profile chart in plotly
 
-def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
+def plot_all_clusters_profile(variables: list[str], cluster_averages: pd.DataFrame, database_avg: list[float]) -> None:
     """
-    Interactive profile plot using Plotly with solid circular markers.
-    Database average is shown as a slightly larger dot.
+    Generates an interactive profile plot using Plotly to visualize the average 
+    values of key variables across clusters, compared against the overall 
+    database average.
 
-    Parameters:
+    Parameters
     ----------
-    - variables: list of variable names
-    - cluster_averages: DataFrame (rows = clusters, columns = variables)
-    - database_avg: list of overall averages for each variable
+    variables : list of str
+        List of variable names corresponding to the features used in clustering.
+    cluster_averages : pandas.DataFrame
+        A DataFrame containing average values for each variable across clusters. 
+        Each row represents a cluster, and each column corresponds to a variable.
+    database_avg : list of float
+        A list containing the overall average value for each variable across 
+        the entire dataset.
 
-    Returns:
+    Returns
     -------
     None
-        Displays an interactive Plotly profile plot. No object is returned.
+        Displays an interactive Plotly scatter plot comparing cluster profiles 
+        to the database average. No object is returned.
     """
     # Create database average DataFrame
     df_database = pd.DataFrame({
@@ -120,15 +137,31 @@ def plot_all_clusters_profile_plotly(variables, cluster_averages, database_avg):
 #################################################################
 
 def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster: int) -> pd.DataFrame:
-    '''
-    Transforms the dataset where each column is an item from the cutomer basket that will be used for the Apriori algorithm.
-    Parameters: 
-    - data: customer basket dataset
-    - data_clusters: DataFrame with customer segmentation in clusters
-    - num_cluster: number of the cluster to be transformed
-    Returns:
-     - df_items: DataFrame with true or false for each item in the transaction ready for the Apriori algorithm   
-    '''
+    """
+    Transforms the customer basket data for a specific cluster into a format 
+    suitable for the Apriori algorithm.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The original customer basket dataset, which must include a 
+        'customer_id' column and a 'list_of_goods' column containing items 
+        purchased as stringified Python lists.
+    data_clusters : pandas.DataFrame
+        A DataFrame that maps 'customer_id' to assigned cluster labels, 
+        typically from a segmentation model.
+    num_cluster : int
+        The cluster number to filter transactions by.
+
+    Returns
+    -------
+    df_items : pandas.DataFrame
+        A one-hot encoded DataFrame where each column represents an item and 
+        each row a transaction (True/False), suitable for Apriori.
+    items_list : list of list of str
+        The original list of goods per customer in the specified cluster, 
+        parsed into Python lists.
+    """
 
     data.set_index('customer_id', inplace=True)
     items = data.sort_values(by='customer_id')
@@ -150,16 +183,29 @@ def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster
 
 def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str = 'confidence', confidence_threshold: float= 0.6) -> pd.DataFrame:
     """
-    Apply the Apriori algorithm to find frequent itemsets and association rules.
+    Applies the Apriori algorithm to identify frequent itemsets and generate 
+    association rules from transaction data.
 
-    Parameters:
-    - data: DataFrame where each column is an item and each row is a transaction with boolean values (True/False)
-    - min_support: Minimum support for frequent itemsets
-    - metric: Metric to use for association rules 'confidence' or 'lift'
-    - confidence_threshold: Minimum confidence threshold for assosiation rules
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        A one-hot encoded DataFrame where each column represents an item and 
+        each row is a transaction with boolean values (True/False).
+    min_support : float, optional (default=0.2)
+        The minimum support threshold to consider an itemset as frequent.
+    metric : str, optional (default='confidence')
+        The metric to evaluate the strength of the association rules. Common 
+        choices are 'confidence' or 'lift'.
+    confidence_threshold : float, optional (default=0.6)
+        The minimum threshold for the selected metric when generating rules.
 
-    Returns:
-    - DataFrame with association rules
+    Returns
+    -------
+    frequent_itemsets : pandas.DataFrame
+        A DataFrame containing the frequent itemsets that meet the support threshold.
+    rules : pandas.DataFrame
+        A DataFrame of generated association rules with metrics such as support, 
+        confidence, and lift.
     """
     frequent_itemsets = apriori(data, min_support=min_support, use_colnames=True)
 
@@ -169,16 +215,24 @@ def apriori_algorithm(data: pd.DataFrame, min_support: float = 0.2, metric: str 
 
 def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_support: float = 0.2) -> pd.DataFrame:
     """
-    Apply the Eclat algorithm to find support of items.
+    Applies the Eclat algorithm to identify frequent itemsets based on their support.
 
-    Parameters:
-    - lt: List of transactions, where each transaction is a list of items
-    - min_combintion: Minimum number of items in a combination
-    - max_combination: Maximum number of items in a combination
-    - min_support: Minimum support for frequent itemsets
+    Parameters
+    ----------
+    lt : list of list of str
+        A list of transactions, where each transaction is a list of items.
+    min_combination : int
+        The minimum number of items in a frequent itemset.
+    max_combination : int
+        The maximum number of items in a frequent itemset.
+    min_support : float, optional (default=0.2)
+        The minimum support threshold required for an itemset to be considered frequent.
 
-    Returns:
-    - DataFrame with frequent itemsets nd their support
+    Returns
+    -------
+    rules_eclat_groceries : pandas.DataFrame
+        A DataFrame containing the frequent itemsets as index and their 
+        corresponding support values, sorted in descending order.
     """
     eclat = ECLAT(data=pd.DataFrame(lt))
 
@@ -198,18 +252,10 @@ def eclat_algorithm(lt: list, min_combination: int, max_combination: int, min_su
 ######################### Radar Chart ###########################
 #################################################################
 
-#This radar (spider) chart provides a visual summary of how different clusters compare across multiple numerical variables. Each axis represents a feature,
-# and each cluster is plotted as a closed line connecting the average value of that cluster on each feature.
-
-def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Cluster', exclude=None):
+def radar_chart_by_cluster(df: pd.DataFrame, cluster_col: str = 'cluster', title: str = 'Radar Chart by Cluster', exclude: list[str] = None) -> None:
     """
     Generates an interactive radar (spider) chart to compare the mean profiles of different clusters 
     across multiple numeric features.
-
-    Each axis of the radar chart represents a numeric variable, and each cluster is visualized 
-    as a closed line connecting the mean values of that cluster for all selected features. This 
-    visualization is useful for understanding how clusters differ in terms of variable magnitude 
-    and shape.
 
     Parameters:
     ----------
@@ -225,11 +271,6 @@ def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Clus
     exclude : list of str, optional (default=None)
         List of column names to exclude from the analysis. Commonly used to omit identifiers, 
         target variables, or any columns that should not be plotted.
-
-    Raises:
-    ------
-    ValueError
-        If no numeric columns remain after applying the exclusions.
 
     Returns:
     -------
@@ -281,17 +322,10 @@ def radar_chart_by_cluster(df, cluster_col='cluster', title='Radar Chart by Clus
 ######################### Multi Boxplot #########################
 #################################################################
 
-#Function to create interactive boxplots of one variable at a time by cluster using Plotly dropdowns.
-
-def plot_cluster_boxplots_dropdown(df, cluster_col, exclude=None, title='Clustered Boxplots'):
+def plot_cluster_boxplots(df: pd.DataFrame, cluster_col: str, exclude: list[str] = None, title: str = 'Clustered Boxplots') -> None:
     """
     Generates interactive boxplots for numeric variables across clusters, allowing users 
     to switch between variables using a dropdown menu.
-
-    This function creates a set of boxplots for each numeric variable (excluding the specified 
-    ones and the cluster column), grouped by cluster. A dropdown menu is added to allow 
-    interactive exploration of one variable at a time, facilitating comparison of distributions 
-    across clusters.
 
     Parameters:
     ----------
@@ -388,16 +422,10 @@ def plot_cluster_boxplots_dropdown(df, cluster_col, exclude=None, title='Cluster
 ############### Profile Comparison Line Version #################
 #################################################################
 
-#Function that creates an interactive line plot comparing mean profiles of clusters across given variables.
-
-def plot_line_comparing_profiles(df, cluster_col, exclude=None, title='Comparing Cluster Profiles (Line Plot)'):
+def plot_line_comparing_profiles(df: pd.DataFrame, cluster_col: str, exclude: list[str] = None, title: str = 'Comparing Cluster Profiles (Line Plot)') -> None:
     """
     Generates an interactive line plot to compare the average profiles of different clusters 
     across a set of numeric variables.
-
-    This function computes the mean values of selected numeric variables for each cluster 
-    and visualizes them as separate lines, allowing for easy comparison of cluster behavior 
-    across features. Variables can be optionally excluded from the plot.
 
     Parameters:
     ----------
@@ -457,18 +485,10 @@ def plot_line_comparing_profiles(df, cluster_col, exclude=None, title='Comparing
 ######### Ratio of Total Individuals with Total Spent ###########
 #################################################################
 
-#This function creates an interactive grouped bar chart using Plotly that compares the percentage distribution of individuals and total lifetime spend across clusters, 
-#and annotates each cluster with the ratio of spend percentage to individual percentage, allowing for easy visual comparison of relative value contribution per cluster.
-
-def plot_cluster_bars_percent(df, cluster_col='cluster', spend_cols=None):
+def plot_cluster_bars_percent(df: pd.DataFrame, cluster_col: str = 'cluster', spend_cols: list[str] = None) -> None:
     """
     Generates an interactive grouped bar chart comparing the percentage distribution 
     of individuals and total lifetime spend across clusters.
-
-    The function computes the total spend per individual, aggregates it by cluster, 
-    and calculates the percentage share of individuals and spend for each cluster. 
-    It also computes and annotates the ratio of spend percentage to individual 
-    percentage, offering insight into the relative value contribution of each cluster.
 
     Parameters:
     ----------
