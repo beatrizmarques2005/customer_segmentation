@@ -64,43 +64,22 @@ def initial_exploration(data: pd.DataFrame) -> None:
 #######################################
 
 def general_customer_info_corrections(customer_info: pd.DataFrame, customer_basket: pd.DataFrame) -> pd.DataFrame:
-    
     """
-    Perform general corrections and transformations on customer information data.
-    This function processes a DataFrame containing customer information by:
-    1. Splitting the `customer_name` column into two parts: `education_level` and `customer_name`.
-       - The `education_level` is extracted from the prefix of the `customer_name` (before the first period).
-       - The `customer_name` is updated to exclude the prefix and is stripped of leading/trailing whitespace.
-    2. Converting the `customer_birthdate` column to a datetime format and calculating the customer's age in years.
-       - The `age` is computed based on the difference between a fixed reference date (2023-06-09) and the birthdate.
-    3. Calculating the number of unique invoices and distinct products bought for each customer.
-        - Customers without any invoices or products bought in the `customer_basket` DataFrame will be set to NaN, as customer_basket is just a sample dataset.
-    4. Removing the `gender` column from the DataFrame.
-    5. Deleting columns that are not relevant
-
+    Cleans and enriches customer information data by performing several preprocessing steps.
+    This function applies the following transformations:
+    1. Splits the 'customer_name' column to extract the education level (if present) and cleans the name.
+    2. Converts the 'customer_birthdate' column to datetime, calculates age as of June 9, 2023, and extracts birth month, day, and year.
+    3. Aggregates customer basket data to compute the number of distinct invoices and distinct products per customer, merging these features into the customer info.
+    4. Creates a binary 'has_loyalty_card' feature indicating the presence of a loyalty card.
+    5. Calculates 'customer_lifetime' as the difference between 2025 and the year of the first transaction, only for customers with a loyalty card.
+    6. Drops columns that are no longer needed after processing.
     Parameters:
-    -----------
-    customer_info : pandas.DataFrame
-        A DataFrame containing customer information with at least the following columns:
-        - 'customer_name': str, the name of the customer (may include education level as a prefix).
-        - 'customer_birthdate': str or datetime, the birthdate of the customer.
-    customer_basket : pandas.DataFrame
-        A DataFrame containing customer transaction data.
-
+        customer_info (pd.DataFrame): DataFrame containing customer information, including columns such as 'customer_name', 'customer_birthdate', 'loyalty_card_number', and 'year_first_transaction'.
+        customer_basket (pd.DataFrame): DataFrame containing basket information, including 'customer_id', 'invoice_id', and 'list_of_goods'.
     Returns:
-    --------
-    pandas.DataFrame
-        The modified DataFrame with the following changes:
-        - A new column `education_level` containing the extracted education level (if available).
-        - The `customer_name` column updated to exclude the education level prefix.
-        - The `customer_birthdate` column converted to datetime format.
-        - A new column `age` containing the customer's age in years (calculated as an integer).
-        - The `gender` column removed.
-    Notes:
-    ------
-    - If the `customer_name` does not contain a period, the entire name is retained, and `education_level` is set to NaN.
-    - Invalid or missing birthdates are coerced to NaT, and the corresponding `age` values are set to NaN.
+        pd.DataFrame: The processed customer information DataFrame with new features and cleaned data.
     """
+    
 
     # 1
     split_names = customer_info['customer_name'].str.split('.', n=1, expand=True)
@@ -143,24 +122,24 @@ def general_customer_info_corrections(customer_info: pd.DataFrame, customer_bask
 
 def general_customer_basket_corrections(customer_basket: pd.DataFrame) -> tuple:
     """
-    Processes and corrects a customer basket DataFrame by performing various transformations 
-    and generating a summary of items.
-    Args:
-        customer_basket (pd.DataFrame): A DataFrame containing customer basket data. 
-            Expected columns:
-                - 'list_of_goods': A column containing string representations of lists of items.
-                - 'invoice_id': A column containing invoice identifiers.
-                - 'customer_id': A column containing customer identifiers.
+    Performs general corrections and feature engineering on a customer basket DataFrame.
+    This function adds two new columns to the input DataFrame:
+        - 'items_count': The total number of items in each customer's basket.
+        - 'distinct_items_count': The number of unique items in each customer's basket.
+    It also explodes the 'list_of_goods' column to create a summary DataFrame with the count of unique invoices and customers per item.
+    Parameters:
+        customer_basket (pd.DataFrame): 
+            A DataFrame containing at least the columns 'list_of_goods', 'invoice_id', and 'customer_id'.
+            The 'list_of_goods' column should contain string representations of lists of items.
     Returns:
-        tuple: A tuple containing:
-            - pd.DataFrame: The updated customer basket DataFrame with the following modifications:
-                - A new column 'items_count' indicating the number of items in each basket.
-                - The 'list_of_goods' column converted to actual lists if it was in string format.
-            - pd.DataFrame: A summary DataFrame with the following columns:
-                - 'list_of_goods': Unique items from the exploded 'list_of_goods' column.
-                - 'invoice_count': The number of unique invoices each item appears in.
-                - 'customer_count': The number of unique customers associated with each item.
+        tuple:
+            - pd.DataFrame: The original DataFrame with added 'items_count' and 'distinct_items_count' columns.
+            - pd.DataFrame: A summary DataFrame with columns:
+                - 'list_of_goods': The item name.
+                - 'invoice_count': Number of unique invoices containing the item.
+                - 'customer_count': Number of unique customers who purchased the item.
     """
+
 
     customer_basket['items_count'] = customer_basket['list_of_goods'].apply(len)
     customer_basket['distinct_items_count'] = customer_basket['list_of_goods'].apply(
@@ -223,17 +202,23 @@ def treat_duplicates(data: pd.DataFrame) -> pd.DataFrame:
 
 def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFrame):
     """
-    Counts the number of occurrences for each inconsistency in customer_info,
-    and returns the inconsistent rows in a new DataFrame with a column indicating the inconsistency.
-
-    Args:
-        customer_info (pd.DataFrame): The input DataFrame.
-
-    Returns:
-        Tuple[pd.Series, pd.DataFrame]: 
-            - A series where the index is the inconsistency description and the value is the count.
-            - A DataFrame containing the rows with inconsistencies and a column 'inconsistency' describing the issue.
+    Checks for various data inconsistencies in a customer information DataFrame.
+    This function examines the provided DataFrame for a set of predefined data quality issues, such as negative values in certain columns, logical inconsistencies, and out-of-range values. It collects and summarizes the number of inconsistencies found for each type and returns both a summary and the rows where inconsistencies were detected.
+    Parameters
+    ----------
+    customer_info : pd.DataFrame
+        DataFrame containing customer information with expected columns such as 'kids_home', 'teens_home', 'number_complaints', 
+        'distinct_stores_visited', 'lifetime_total_distinct_products', 'distinct_products_sum', 'customer_lifetime', 
+        'percentage_of_products_bought_promotion', 'age', and columns starting with 'lifetime_spend_'.
+    Returns
+    -------
+    inconsistencies : pd.Series
+        A summary of the number of inconsistencies found for each type, indexed by inconsistency label.
+    inconsistent_rows : pd.DataFrame
+        DataFrame containing all rows from the input that were found to be inconsistent, with an additional column 'inconsistency'
+        indicating the type of inconsistency detected.
     """
+
     inconsistencies = {}
     inconsistent_rows = pd.DataFrame()
 
@@ -296,6 +281,21 @@ def check_inconsistencies(customer_info: pd.DataFrame) -> (pd.Series, pd.DataFra
     display(inconsistent_rows)
 
 def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
+    """
+    Corrects data inconsistencies in the customer_info DataFrame.
+    This function iterates through each row of the input DataFrame and applies the following corrections:
+    - Converts negative values in 'kids_home', 'teens_home', 'distinct_stores_visited', and 'lifetime_total_distinct_products' to their absolute values.
+    - Sets negative values in 'number_complaints' and 'customer_lifetime' to 0.
+    - Ensures 'lifetime_total_distinct_products' is at least 1 if it is 0.
+    - If 'distinct_products_sum' exceeds 'lifetime_total_distinct_products', updates 'lifetime_total_distinct_products' to match 'distinct_products_sum'.
+    - Clamps 'percentage_of_products_bought_promotion' to the range [0, 1].
+    - Converts negative values in columns starting with 'lifetime_spend_' to their absolute values.
+    - If the difference between 'age' and 'customer_lifetime' is less than 18, sets 'customer_lifetime' to 0.
+    Args:
+        customer_info (pd.DataFrame): DataFrame containing customer information with potential inconsistencies.
+    Returns:
+        pd.DataFrame: The corrected DataFrame with inconsistencies resolved.
+    """
     for index, row in customer_info.iterrows():
 
         if row['kids_home'] < 0:
@@ -347,32 +347,42 @@ def correcting_inconsistencies(customer_info: pd.DataFrame) -> pd.DataFrame:
 
 def check_outliers_numerical_boxplot(customer_info: pd.DataFrame) -> None:
     """
-    Generates interactive box plots for numerical columns in the customer DataFrame to visualize outliers.
-    Certain columns are excluded as they exhibit a categorical behavior.
-    Args:
-        customer_info (pd.DataFrame): A pandas DataFrame containing customer information 
-                                      with numerical columns to analyze.
-    Excluded Columns:
-        - 'customer_id'
-        - 'kids_home'
-        - 'teens_home'
-        - 'number_complaints'
-        - 'year_first_transaction'
-        - 'distinct_stores_visited'
-        - 'typical_hour'
+    Display interactive box plots for numerical columns in the customer DataFrame to help visualize potential outliers.
 
-    Returns:
-        None: The function directly displays the Plotly figure in the output.
+    This function generates a dropdown-enabled Plotly figure, allowing users to select and inspect box plots for each
+    numerical feature (excluding those with categorical behavior or identifiers). This aids in identifying outliers and
+    understanding the distribution of each variable.
 
+    Parameters
+    ----------
+    customer_info : pd.DataFrame
+        DataFrame containing customer information with numerical columns to analyze.
+
+    Excludes Columns
+    ----------------
+    - 'customer_id'
+    - 'kids_home'
+    - 'teens_home'
+    - 'number_complaints'
+    - 'customer_lifetime'
+    - 'distinct_stores_visited'
+    - 'typical_hour'
+    - 'has_loyalty_card'
+
+    Returns
+    -------
+    None
+        Displays the interactive Plotly box plot figure.
     """
 
     numerical_columns = list(customer_info.select_dtypes(include=['number']))
-    columns_to_remove=['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card']
-    
+    columns_to_remove = [
+        'customer_id', 'kids_home', 'teens_home', 'number_complaints',
+        'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card'
+    ]
     numerical_columns = [col for col in numerical_columns if col not in columns_to_remove]
-    
-    fig = go.Figure()
 
+    fig = go.Figure()
     buttons = []
 
     for idx, column in enumerate(numerical_columns):
@@ -401,30 +411,44 @@ def check_outliers_numerical_boxplot(customer_info: pd.DataFrame) -> None:
 
 def check_outliers_numerical_histogram(customer_info: pd.DataFrame) -> None:
     """
-    Generates interactive histograms for numerical columns in a DataFrame to check for outliers.
-    Certain columns are excluded as they exhibit a categorical behavior.
-    Args:
-        customer_info (pd.DataFrame): A pandas DataFrame containing customer information, including numerical columns.
-    Excluded Columns:
+    Display interactive histograms for numerical columns in the customer DataFrame to help visualize potential outliers.
+
+    This function creates an interactive Plotly figure with a dropdown menu, allowing users to select and view histograms
+    for each numerical feature (excluding columns that are identifiers or exhibit categorical behavior). This visualization
+    helps in identifying outliers and understanding the distribution of each numerical variable.
+
+    Parameters
+    ----------
+    customer_info : pd.DataFrame
+        DataFrame containing customer information with numerical columns to analyze.
+
+    Notes
+    -----
+    The following columns are excluded from the analysis as they are either identifiers or considered categorical:
         - 'customer_id'
         - 'kids_home'
         - 'teens_home'
         - 'number_complaints'
-        - 'year_first_transaction'
+        - 'customer_lifetime'
         - 'distinct_stores_visited'
         - 'typical_hour'
-    Returns:
-        None: The function displays the interactive Plotly figure and does not return any value.
+        - 'has_loyalty_card'
 
+    Returns
+    -------
+    None
+        Displays the interactive Plotly histogram figure in the output cell.
     """
     numerical_columns = list(customer_info.select_dtypes(include=['number']))
-    columns_to_remove = ['customer_id', 'kids_home', 'teens_home', 'number_complaints', 'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card']
-    
+    columns_to_remove = [
+        'customer_id', 'kids_home', 'teens_home', 'number_complaints',
+        'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card'
+    ]
     numerical_columns = [col for col in numerical_columns if col not in columns_to_remove]
-    
+
     fig = go.Figure()
     buttons = []
-    
+
     for idx, column in enumerate(numerical_columns):
         fig.add_trace(go.Histogram(
             x=customer_info[column],
@@ -433,14 +457,14 @@ def check_outliers_numerical_histogram(customer_info: pd.DataFrame) -> None:
             visible=(idx == 0),
             nbinsx=30
         ))
-        
+
         buttons.append(
             {'method': 'update',
              'label': column,
              'args': [{'visible': [i == idx for i in range(len(numerical_columns))]},
                       {'title': f'Histogram for <i>{column}</i>', 'showlegend': True}]}
         )
-    
+
     fig.update_layout(
         updatemenus=[{'type': 'dropdown', 'active': 0, 'buttons': buttons, 'x': 1, 'y': 1.15}],
         title=f'Histogram for <i>{numerical_columns[0]}</i>',
@@ -448,29 +472,28 @@ def check_outliers_numerical_histogram(customer_info: pd.DataFrame) -> None:
         xaxis_title='Value',
         yaxis_title='Count'
     )
-    
+
     fig.show()
 
 def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
+    
     """
-    Generates interactive bar plots for categorical columns in a DataFrame to help identify outliers.
-    It includes both explicitly categorical columns and numerical columns that exhibit categorical behavior.
-    Args:
-        customer_info (pd.DataFrame): A pandas DataFrame containing customer information. The DataFrame
-                                      should include the specified categorical columns and numerical
-                                      columns with categorical behavior.
-    Categorical Columns:
-        - 'education_level'
-    Numerical Columns with Categorical Behavior:
-        - 'kids_home'
-        - 'teens_home'
-        - 'number_complaints'
-        - 'year_first_transaction'
-        - 'distinct_stores_visited'
-        - 'typical_hour'
-    Returns:
-        None: The function displays the interactive Plotly figure and does not return any value.
-
+    Visualizes the distribution of categorical and categorical-like numerical columns in a DataFrame using interactive Plotly bar plots.
+    This function helps identify potential outliers or anomalies in categorical data by generating an interactive bar chart for each specified column. Users can switch between columns using a dropdown menu. Both explicitly categorical columns and numerical columns that represent discrete categories are included.
+        customer_info (pd.DataFrame): 
+            DataFrame containing customer information. Must include the following columns:
+                - Categorical columns: 
+                    * 'education_level'
+                - Numerical columns with categorical behavior:
+                    * 'kids_home'
+                    * 'teens_home'
+                    * 'number_complaints'
+                    * 'customer_lifetime'
+                    * 'distinct_stores_visited'
+                    * 'typical_hour'
+                    * 'has_loyalty_card'
+        None: 
+            Displays an interactive Plotly figure in the output cell or browser. Does not return any value.
     """
     categorical_columns = ['education_level']
     numerical_with_categorical_behaviour= ['kids_home', 'teens_home', 'number_complaints', 'customer_lifetime', 'distinct_stores_visited', 'typical_hour', 'has_loyalty_card']
@@ -507,10 +530,18 @@ def check_outliers_categorical(customer_info: pd.DataFrame) -> None:
     fig.show()
 
 def treat_outliers(data: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
+
     """
-    Remove rows considered outliers based on predefined upper thresholds for specific columns.
-    Returns a tuple: (DataFrame with outliers removed, DataFrame of removed outliers).
+    Identifies and removes outlier rows from the input DataFrame based on predefined upper thresholds for specific columns.
+    For each column listed in the internal `thresholds` dictionary, any row with a value exceeding the corresponding threshold is considered an outlier and removed. Missing values (NaN) are not treated as outliers.
+    Parameters:
+        data (pd.DataFrame): The input DataFrame containing the data to be filtered for outliers.
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame]:
+            - The first DataFrame contains the rows with outliers removed.
+            - The second DataFrame contains only the rows identified as outliers (i.e., those that were removed).
     """
+    
     thresholds = {
         'kids_home': 8,
         'teens_home': 3,
@@ -566,15 +597,18 @@ def defining_params_dbscan_outliers(customer_info: pd.DataFrame, min_samples: in
 
 def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> tuple:
     """
-    Removes multidimensional outliers detected by DBSCAN and returns both the cleaned and excluded rows.
+    Detects and removes multidimensional outliers from a DataFrame using the DBSCAN clustering algorithm.
+    This function applies DBSCAN to the input DataFrame to identify outliers based on density. Rows classified as outliers are separated from the main dataset. The function returns two DataFrames: one with outliers removed, and another containing only the excluded outlier rows.
 
     Args:
-        customer_info (pd.DataFrame): The input DataFrame.
-        min_samples (int): The minimum number of samples for DBSCAN.
-        eps (float): The epsilon parameter for DBSCAN.
+        customer_info (pd.DataFrame): The input DataFrame containing customer information and features for outlier detection.
+        min_samples (int): The minimum number of samples required in a neighborhood for a point to be considered a core point in DBSCAN.
+        eps (float): The maximum distance between two samples for them to be considered as in the same neighborhood (DBSCAN epsilon parameter).
 
     Returns:
-        tuple: (DataFrame without outliers, DataFrame of excluded outliers)
+        tuple:
+            - pd.DataFrame: DataFrame with outliers removed (cleaned data).
+            - pd.DataFrame: DataFrame containing only the excluded outlier rows.
     """
     customer_info = check_multidimensional_outliers_dbscan(customer_info, min_samples, eps)
     kept = customer_info[customer_info['is_outlier_dbscan'] == False].drop(columns=['cluster_dbscan', 'is_outlier_dbscan'])
@@ -586,18 +620,17 @@ def treat_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samp
 #######################################
 
 def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
+
     """
-    This function imputes missing values in the 'kids_home' and 'teens_home' columns based on the following logic:
-    1. If 'kids_home' is missing (NaN) and 'teens_home' is not missing and greater than 0, then 'kids_home' is set to 0.
-    2. If 'teens_home' is missing (NaN) and 'kids_home' is not missing and greater than 0, then 'teens_home' is set to 0.
-    3. If both 'kids_home' and 'teens_home' are missing (NaN), both are set to 0.
-
+    Impute missing values in the 'kids_home' and 'teens_home' columns of a customer DataFrame using logical rules.
+    This function fills missing values (NaN) in the 'kids_home' and 'teens_home' columns based on the following logic:
+        1. If 'kids_home' is missing and 'teens_home' is present and greater than 0, set 'kids_home' to 0.
+        2. If 'teens_home' is missing and 'kids_home' is present and greater than 0, set 'teens_home' to 0.
+        3. If both 'kids_home' and 'teens_home' are missing, set both to 0.
     Args:
-        customer_info (pd.DataFrame): A pandas DataFrame containing customer information,
-                                      including the 'kids_home' and 'teens_home' columns.
-
+        customer_info (pd.DataFrame): DataFrame containing customer information, including 'kids_home' and 'teens_home' columns.
     Returns:
-        pd.DataFrame: The updated DataFrame with imputed values in the 'kids_home' and 'teens_home' columns.
+        pd.DataFrame: DataFrame with imputed values in 'kids_home' and 'teens_home'.
     """
     # 1
     customer_info['kids_home'] = np.where(
@@ -622,7 +655,7 @@ def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
     
     return customer_info
 
-def impute_lifetime_spend_alcohol_drinks(customer_info: pd.DataFrame) -> pd.DataFrame:
+'''def impute_lifetime_spend_alcohol_drinks(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Imputes missing values in the 'lifetime_spend_alcohol_drinks' column of the customer_info DataFrame.
 
@@ -637,7 +670,7 @@ def impute_lifetime_spend_alcohol_drinks(customer_info: pd.DataFrame) -> pd.Data
     """
     customer_info['lifetime_spend_alcohol_drinks'].replace(np.nan, 0, inplace = True)
 
-    return customer_info
+    return customer_info'''
 
 def impute_education_level(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
@@ -668,37 +701,38 @@ def impute_education_level(customer_info: pd.DataFrame) -> pd.DataFrame:
 
 def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
-    Impute missing values in the dataset by applying a series of imputation functions.
-
+    Imputes missing values in the customer_info DataFrame using specific imputation functions.
+    This function applies a series of imputation steps to handle missing values in the input DataFrame:
+    1. Imputes missing values related to the number of kids and teens at home.
+    2. (Optional) Imputation for lifetime spend on alcohol drinks (currently commented out).
+    3. Imputes missing values for education level.
     Args:
-        customer_info (pd.DataFrame): The input DataFrame with potential missing values.
-
+        customer_info (pd.DataFrame): DataFrame containing customer information with possible missing values.
     Returns:
-        pd.DataFrame: The DataFrame with missing values imputed.
+        pd.DataFrame: DataFrame with missing values imputed for specified columns.
     """
+
     customer_info = impute_kids_teens_home(customer_info)
-    customer_info = impute_lifetime_spend_alcohol_drinks(customer_info)
+    # customer_info = impute_lifetime_spend_alcohol_drinks(customer_info)
     customer_info = impute_education_level(customer_info)
 
     return customer_info
 
 def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFrame:
     """
-    Applies KNN imputation to all columns except 'customer_id', ensuring that
-    the 'customer_id' column remains unchanged.
-
-    Parameters:
-    -----------
+    Imputes missing values in a customer information DataFrame using K-Nearest Neighbors (KNN) imputation.
+    Parameters
+    ----------
     customer_info : pd.DataFrame
-        The input DataFrame containing the data to be imputed. It must include a 'customer_id' column.
+        DataFrame containing customer information, including a 'customer_id' column and features with possible missing values.
     n_neighbors : int, optional (default=5)
-        The number of nearest neighbors to use for imputing missing values.
-
-    Returns:
-    --------
+        Number of neighboring samples to use for imputation.
+    Returns
+    -------
     pd.DataFrame
-        A new DataFrame with missing values imputed. The 'customer_id' column is preserved as is.
+        DataFrame with missing values imputed, preserving the original 'customer_id' column.
     """
+
     id_col = customer_info['customer_id']
     features = customer_info.drop(columns=['customer_id'])
 
@@ -716,21 +750,16 @@ def knn_imputing(customer_info: pd.DataFrame, n_neighbors: int = 5) -> pd.DataFr
 
 def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
-    Encodes and preprocesses customer information by performing the following transformations:
-    1. Drops the 'customer_name' column as it is not required for analysis.
-    2. Encodes the 'education_level' column into numerical values representing years of education.
-       - Mapping: {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 16, 'Msc': 18, 'Phd': 21}
-    3. Encodes the 'customer_gender' column into binary values:
-       - Mapping: {'male': 0, 'female': 1}
-    4. Drops the original 'customer_gender' and 'education_level' columns after encoding.
-    Args:
-        customer_info (pd.DataFrame): A pandas DataFrame containing customer information with 
-                                      columns 'customer_name', 'education_level', and 'customer_gender'.
+    Encodes categorical features in the customer_info DataFrame.
+    This function maps the 'education_level' column to the corresponding number of years of education
+    and the 'customer_gender' column to a binary gender representation. The original 'education_level'
+    and 'customer_gender' columns are dropped from the DataFrame.
+    Parameters:
+        customer_info (pd.DataFrame): DataFrame containing customer information with at least
+            'education_level' and 'customer_gender' columns.
     Returns:
-        pd.DataFrame: A pandas DataFrame with the processed customer information, including:
-                      - 'education_years': Numerical representation of education level.
-                      - 'gender': Binary representation of gender.
-                      - All other columns from the original DataFrame except the dropped ones.
+        pd.DataFrame: The input DataFrame with encoded 'education_years' and 'gender' columns,
+        and without the original 'education_level' and 'customer_gender' columns.
     """
 
     education_mapping = {'4th': 4, '6th': 6, '9th': 9, 'Hs': 12, 'Bsc': 15, 'Msc': 17, 'Phd': 20}
@@ -748,6 +777,15 @@ def customer_info_encoding(customer_info: pd.DataFrame) -> pd.DataFrame:
 #######################################
 
 def scaling(data: pd.DataFrame) -> (pd.DataFrame, MinMaxScaler):
+    """
+    Scales the features of a DataFrame using MinMaxScaler, optionally preserving a 'customer_id' column.
+    Parameters:
+        data (pd.DataFrame): Input DataFrame containing features to be scaled. If a 'customer_id' column is present, it will be excluded from scaling and preserved in the output.
+    Returns:
+        Tuple[pd.DataFrame, MinMaxScaler]: 
+            - A DataFrame with scaled features (and 'customer_id' column if present).
+            - The fitted MinMaxScaler instance used for scaling.
+    """
 
     if 'customer_id' in data.columns:
         id_col = data['customer_id']
@@ -768,11 +806,20 @@ def scaling(data: pd.DataFrame) -> (pd.DataFrame, MinMaxScaler):
     return scaled_df, scaler
 
 def unscale_dataframe(scaled_df, scaler, columns=None):
-    # Exclude 'customer_id' from unscaling
+    """
+    Reverts the scaling transformation applied to a DataFrame using the provided scaler.
+    Parameters:
+        scaled_df (pd.DataFrame): The DataFrame containing scaled features. May include a 'customer_id' column.
+        scaler (sklearn.base.TransformerMixin): The scaler object used to scale the data (e.g., StandardScaler, MinMaxScaler).
+        columns (list, optional): List of column names to unscale. If None, all columns in scaled_df are considered except 'customer_id'.
+    Returns:
+        pd.DataFrame: A DataFrame with the specified columns unscaled. If 'customer_id' was present in the input, it is included as the first column.
+    """
+
     cols = [col for col in (columns if columns is not None else scaled_df.columns) if col != 'customer_id']
     unscaled_array = scaler.inverse_transform(scaled_df[cols])
     unscaled_df = pd.DataFrame(unscaled_array, columns=cols, index=scaled_df.index)
-    # If customer_id exists, add it back as the first column
+
     if 'customer_id' in scaled_df.columns:
         unscaled_df.insert(0, 'customer_id', scaled_df['customer_id'])
     return unscaled_df
@@ -784,15 +831,15 @@ def unscale_dataframe(scaled_df, scaler, columns=None):
 
 def correlation_matrix(customer_info: pd.DataFrame) -> list:
     """
-    Generates an interactive correlation matrix heatmap using Plotly and identifies strongly correlated pairs.
-    Only the lower triangle (excluding the diagonal) is shown for clarity.
-
-    Args:
-        customer_info (pd.DataFrame): The input DataFrame containing numerical data.
-
+    Generates and displays a masked correlation matrix heatmap for the given customer information DataFrame.
+    This function computes the correlation matrix of the input DataFrame, masks the upper triangle for better readability,
+    and visualizes the result as an interactive heatmap using Plotly.
+    Parameters:
+        customer_info (pd.DataFrame): A DataFrame containing customer information with numerical features.
     Returns:
-        list: A list of tuples containing pairs of columns with correlation above the threshold.
+        list: This function does not return any value explicitly, but displays an interactive correlation matrix heatmap.
     """
+
     corr = customer_info.corr()
 
     # Mask upper triangle
@@ -820,215 +867,13 @@ def correlation_matrix(customer_info: pd.DataFrame) -> list:
     fig.show()
 
 def treat_redundancy(data: pd.DataFrame, cols: list) -> pd.DataFrame:
+    """
+    Removes specified redundant columns from a pandas DataFrame.
+    Args:
+        data (pd.DataFrame): The input DataFrame from which columns will be removed.
+        cols (list): List of column names to be dropped from the DataFrame.
+    Returns:
+        pd.DataFrame: A new DataFrame with the specified columns removed.
+    """
+
     return data.drop(cols, axis = 1)
-
-#######################################
-########## FEATURE SELECTION ##########
-#######################################
-
-# SOM
-def som(data_np: np.ndarray, 
-                                        x: int, 
-                                        y: int, 
-                                        input_len: int, 
-                                        sigma: float = 0.5,
-                                        learning_rate: float = 1,
-                                        neighborhood_function: str ='gaussian', 
-                                        random_seed: int = 42,
-                                        number_of_iterations: int = 1000) -> MiniSom:
-    """
-    Train a Self-Organizing Map (SOM) using the given data.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
-        x (int): The number of rows in the SOM grid.
-        y (int): The number of columns in the SOM grid.
-        input_len (int): The number of features in the input data.
-        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
-        learning_rate (float, optional): The initial learning rate. Default is 0.5.
-        random_seed (int, optional): The seed for random number generation. Default is None.
-        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
-
-    Returns:
-        MiniSom: The trained SOM model.
-    """
-    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
-    #som.random_weights_init(data)
-    #som.train_random(data, num_iteration=number_of_iterations)
-    som.train_batch(data_np, number_of_iterations)
-    return som
-
-def som_mean_clusters(data, col):
-    """
-    Calculate the mean of a specified column grouped by SOM winner nodes.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        col (str): The column name for which the mean is calculated.
-
-    Returns:
-        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
-    """
-    grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
-    return grouped
-
-'''
-def visualize_data_points_grid(data, scaled_data, som_model, color_variable, color_dict):
-    """
-    Visualize data points on a SOM grid with a distance map in the background.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        scaled_data (np.ndarray): The scaled data used for SOM training.
-        som_model (minisom.MiniSom): The trained SOM model.
-        color_variable (str): The column name used for coloring data points.
-        color_dict (dict): A dictionary mapping unique values in the color_variable to colors.
-
-    Returns:
-        None: Displays a scatter plot with the SOM grid.
-    """
-    target = data[color_variable]
-    fig, ax = plt.subplots()
-
-    # Get weights for SOM winners
-    w_x, w_y = zip(*[som_model.winner(d) for d in scaled_data])
-    w_x = np.array(w_x)
-    w_y = np.array(w_y)
-
-    # Plot distance map in the background
-    plt.pcolor(som_model.distance_map().T, cmap='bone_r', alpha=.2)
-    plt.colorbar()
-
-    # Plot data points with random perturbation to avoid overlap
-    for c in np.unique(target):
-        idx_target = target == c
-        plt.scatter(
-            w_x[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            w_y[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            s=50, c=color_dict[c], label=c
-        )
-
-    ax.legend(bbox_to_anchor=(1.2, 1.05))
-    plt.grid()
-    plt.show()
-'''
-def plot_feature_influence(trained_som, data):
-    """
-    Plot the influence of each feature on the SOM nodes.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        data (pd.DataFrame): The input DataFrame containing the data.
-
-    Returns:
-        None: Displays a grid of plots showing feature influence.
-    """
-    feature_names = data.columns
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(15, 15))
-    for i, f in enumerate(feature_names):
-        plt.subplot(5, 5, i + 1)
-        plt.title(f)
-        plt.pcolor(W[:, :, i].T, cmap='coolwarm')
-        plt.xticks(np.arange(10 + 1))
-        plt.yticks(np.arange(10 + 1))
-    plt.tight_layout()
-    plt.show()
-
-def plot_most_important_variable(trained_som, features):
-    """
-    Plot the most important variable for each SOM unit.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        features (list): List of feature names used in SOM training.
-
-    Returns:
-        None: Displays a plot showing the most important variable for each SOM unit.
-    """
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(8, 8))
-    for i in np.arange(W.shape[0]):
-        for j in np.arange(W.shape[1]):
-            feature = np.argmax(W[i, j, :])
-            plt.plot([i + .5], [j + .5], 'o', color='C' + str(feature),
-                     marker='s', markersize=24)
-
-    legend_elements = [
-        Patch(facecolor='C' + str(i), edgecolor='w', label=f) for i, f in enumerate(features)
-    ]
-
-    plt.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, .95))
-    plt.xlim([0, 15])
-    plt.ylim([0, 15])
-    plt.show()
-
-def feature_selection_with_clustering(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
-    feature_importance = pd.DataFrame(index=data.columns)
-
-    data_np = data.values  # Conversão para numpy array
-
-    # SOM
-    som = MiniSom(x=1, y=n_clusters, input_len=data.shape[1], sigma=0.5, learning_rate=0.5)
-    som.random_weights_init(data_np)
-    som.train_random(data_np, 100)
-    som_weights = som.get_weights()[0]
-    som_importance = np.std(som_weights, axis=0) > np.mean(np.std(som_weights, axis=0))
-    feature_importance['SOM'] = som_importance
-
-    # K-Means
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    kmeans.fit(data.T)
-    kmeans_importance = pd.Series(kmeans.labels_).value_counts(normalize=True) < 0.5
-    feature_importance['K-Means'] = [kmeans_importance[label] for label in kmeans.labels_]
-
-    # Hierarchical Clustering
-    linkage_matrix = linkage(data.T, method='ward')
-    hierarchical_labels = fcluster(linkage_matrix, t=n_clusters, criterion='maxclust')
-    hierarchical_importance = pd.Series(hierarchical_labels).value_counts(normalize=True) < 0.5
-    feature_importance['Hierarchical'] = [hierarchical_importance[label] for label in hierarchical_labels]
-
-    # SHAP (SHapley Additive exPlanations)
-
-    # Fit a simple model for SHAP (using RandomForestClassifier as an example)
-    # For demonstration, create a dummy target if not present
-    if 'target' in data.columns:
-        X = data.drop(columns=['target'])
-        y = data['target']
-    else:
-        X = data
-        y = np.random.randint(0, 2, size=len(data))
-
-    model = RandomForestClassifier(n_estimators=50, random_state=42)
-    model.fit(X, y)
-
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
-    if isinstance(shap_values, list):  # For multiclass, take mean over classes
-        shap_importance = np.mean(np.abs(shap_values), axis=0).mean(axis=0)
-    else:
-        shap_importance = np.abs(shap_values).mean(axis=0)
-
-    feature_importance['SHAP'] = pd.Series(shap_importance, index=X.columns) > shap_importance.mean()
-    feature_importance['SHAP_rank'] = pd.Series(shap_importance, index=X.columns).rank(ascending=False)
-
-    return feature_importance
-
-def feature_selection(data: pd.DataFrame, n_clusters: int = 7) -> pd.DataFrame:
-
-    feature_importance = feature_selection_with_clustering(data, n_clusters).T
-    columns_to_delete = feature_importance.columns[feature_importance.sum(axis=0) == 0]
-    feature_importance.drop(columns=columns_to_delete, inplace=True)
-    data = data.loc[:, feature_importance.columns]
-
-    return data
-
-def pca(data: pd.DataFrame, num_components: int = None) -> PCA:
-    pca = PCA(num_components=25)
-    pca.fit(data)
-    return pca
-
-
-
