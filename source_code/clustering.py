@@ -17,16 +17,29 @@ from scipy.spatial.distance import cdist
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, scaled: bool = False) -> pd.DataFrame:
     """
-    Summarize cluster feature means, excluding specified columns.
+    Computes the average values of numerical variables for each cluster 
+    and optionally visualizes them as a heatmap.
 
-    Args:
-        data (pd.DataFrame): Input data including cluster labels.
-        cluster_col (str): Name of the column containing cluster labels.
-        exclude_cols (list, optional): Columns to exclude from the summary.
-        scaled (bool): If True, use colored heatmap; if False, just print the DataFrame.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset containing feature columns and cluster assignments.
+    cluster_col : str
+        The name of the column in `data` that indicates cluster labels 
+        (e.g., 'cluster').
+    exclude_cols : list, optional
+        A list of columns to exclude from the averaging. These typically 
+        include identifiers or non-numeric fields. Defaults to None.
+    scaled : bool, optional
+        If True, displays a heatmap of the cluster-wise feature means. 
+        If False, prints the resulting DataFrame without visualization. 
+        Defaults to False.
 
-    Returns:
-        pd.DataFrame: Transposed mean values for each cluster.
+    Returns
+    -------
+    summary : pandas.DataFrame
+        A DataFrame where rows are features and columns are clusters. 
+        Each cell contains the mean value of a feature within a cluster.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -72,15 +85,31 @@ def visualize_clusters(
     exclude_cols: list = None
 ) -> None:
     """
-    Visualize clusters in 2D using UMAP for dimensionality reduction.
+    Visualizes clusters in a 2D space using UMAP for dimensionality reduction.
 
-    Args:
-        data (pd.DataFrame): Input data including features and cluster labels.
-        cluster_col (str): Name of the column containing cluster labels.
-        n_neighbors (int): UMAP n_neighbors parameter.
-        min_dist (float): UMAP min_dist parameter.
-        random_state (int): Random seed for reproducibility.
-        exclude_cols (list, optional): Columns to exclude from UMAP embedding.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset containing features and cluster assignments.
+    cluster_col : str
+        The name of the column in `data` that indicates cluster labels 
+        (e.g., 'cluster').
+    n_neighbors : int, optional
+        The number of neighboring points used in local approximations of the manifold 
+        structure. Passed to the UMAP algorithm. Defaults to None (uses UMAP default).
+    min_dist : float, optional
+        The minimum distance between embedded points. Controls how tightly UMAP 
+        packs points together. Defaults to None (uses UMAP default).
+    random_state : int, optional
+        Seed for reproducibility of UMAP embeddings. Defaults to 42.
+    exclude_cols : list, optional
+        A list of column names to exclude from the UMAP embedding process 
+        (e.g., IDs or non-feature columns). Defaults to None.
+
+    Returns
+    -------
+    None
+        Displays an interactive 2D scatter plot of clusters using Plotly.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -110,7 +139,25 @@ def visualize_clusters(
     fig.show()
 
 def cluster_sizes(data: pd.DataFrame, cluster_col: str, show_plot: bool = True) -> pd.Series:
+    """
+    Computes and optionally visualizes the number of records in each cluster.
 
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset containing cluster assignments.
+    cluster_col : str
+        The name of the column in `data` that indicates cluster labels 
+        (e.g., 'cluster').
+    show_plot : bool, optional
+        If True, displays a bar chart showing the number of records per cluster. 
+        If False, only returns the cluster size counts. Defaults to True.
+
+    Returns
+    -------
+    sizes : pandas.Series
+        A Series indexed by cluster label, containing the count of records in each cluster.
+    """
     sizes = data[cluster_col].value_counts().sort_index()
 
     fig = go.Figure(
@@ -136,7 +183,32 @@ def map_visualization(
     height: int = 500,
     title: str = "Map Visualization"
 ) -> None:
+    """
+    Displays a map with points plotted based on latitude and longitude coordinates.
 
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset containing geographic coordinates.
+    lat_col : str, optional
+        The name of the column in `data` that contains latitude values. 
+        Defaults to 'latitude'.
+    lon_col : str, optional
+        The name of the column in `data` that contains longitude values. 
+        Defaults to 'longitude'.
+    zoom : int, optional
+        Initial zoom level for the map view. Higher values zoom in further. 
+        Defaults to 3.
+    height : int, optional
+        Height of the map figure in pixels. Defaults to 500.
+    title : str, optional
+        Title displayed above the map. Defaults to "Map Visualization".
+
+    Returns
+    -------
+    None
+        Displays an interactive map with points using Plotly and OpenStreetMap tiles.
+    """
     fig = px.scatter_mapbox(
         data,
         lat=lat_col,
@@ -163,29 +235,51 @@ def reassign_clusters(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.Da
     """
     Reassigns cluster labels in both scaled and unscaled DataFrames based on a mapping dictionary.
 
-    Args:
-        data_clusters (pd.DataFrame): DataFrame with cluster assignments (scaled).
-        data_cluster_notscaled (pd.DataFrame): DataFrame with cluster assignments (not scaled).
-        dict_num_cluster (dict): Mapping from old cluster numbers to new cluster numbers.
+    Parameters
+    ----------
+    data_clusters : pandas.DataFrame
+        DataFrame containing scaled data with existing cluster assignments in a column named 'cluster'.
+    data_cluster_notscaled : pandas.DataFrame
+        DataFrame containing unscaled data with cluster assignments in a column named 'cluster'.
+    dict_num_cluster : dict
+        Dictionary mapping old cluster labels to new cluster labels 
+        (e.g., {0: 2, 1: 0, 2: 1}).
 
-    Returns:
-        tuple[pd.DataFrame, pd.DataFrame]: DataFrames with updated cluster labels.
+    Returns
+    -------
+    data_clusters : pandas.DataFrame
+        The scaled DataFrame with cluster labels reassigned according to `dict_num_cluster`.
+    data_cluster_notscaled : pandas.DataFrame
+        The unscaled DataFrame with cluster labels reassigned according to `dict_num_cluster`.
     """
     data_clusters = data_clusters.copy()
     data_cluster_notscaled = data_cluster_notscaled.copy()
     data_clusters['cluster'] = data_clusters['cluster'].replace(dict_num_cluster)
     data_cluster_notscaled['cluster'] = data_cluster_notscaled['cluster'].replace(dict_num_cluster)
+
     return data_clusters, data_cluster_notscaled
 
-def find_cluster_exlude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
-    '''Find the cluster for each data point (customer) that was deleted from the original dataset. 
-    Parameters:
-    - 
-    - data_exclude: DataFrame with the data points that were excluded from the original dataset without the Makro cluster
-    - exclude_cols: list of columns to exclude from the distance calculation
-    Returns:
-    - DataFrame where each excluded point is assigned a cluster based on the final clustering'''
-    
+def find_cluster_exclude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
+    """
+    Assigns clusters to excluded data points based on proximity to existing cluster centroids.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset used for the original clustering, including the final cluster labels 
+        in a column named 'cluster'.
+    data_excluded : pandas.DataFrame
+        The dataset containing points that were excluded from the original clustering, 
+        without cluster labels.
+    exclude_cols : list
+        List of columns to exclude from the distance calculation (e.g., IDs, non-numeric columns).
+
+    Returns
+    -------
+    excluded_ids_no_makro_with_cluster : pandas.DataFrame
+        A copy of `data_excluded` with an added 'cluster' column, assigning each row to 
+        the nearest cluster based on feature space distance.
+    """
     feature_cols_for_distance = [col for col in data.columns if col not in exclude_cols + ['cluster']]
     centroids= data.groupby('cluster')[feature_cols_for_distance].mean().values
     excluded_features = data_excluded[feature_cols_for_distance].values
@@ -198,14 +292,22 @@ def find_cluster_exlude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exc
 
 def assign_excluded_ids_to_clusters(excluded_ids_no_makro: pd.DataFrame, clustering: pd.DataFrame) -> pd.DataFrame:
     """
-    Assign clusters to excluded_ids_no_makro based on the nearest centroid from clustering.
+    Assigns clusters to excluded data points based on the nearest cluster centroid.
 
-    Parameters:
-    excluded_ids_no_makro (DataFrame): DataFrame containing the excluded IDs without Makro.
-    clustering (DataFrame): DataFrame containing the clustering results with centroids.
+    Parameters
+    ----------
+    excluded_ids_no_makro : pandas.DataFrame
+        DataFrame containing the data points that were excluded from the original clustering 
+        (e.g., without Makro), including all relevant feature columns.
+    clustering : pandas.DataFrame
+        DataFrame containing the original clustering results, including a 'cluster' column 
+        and all relevant feature columns for centroid calculation.
 
-    Returns:
-    DataFrame: Updated DataFrame with cluster assignments for excluded IDs.
+    Returns
+    -------
+    excluded_ids_no_makro_with_cluster : pandas.DataFrame
+        A copy of `excluded_ids_no_makro` with an added 'cluster' column, assigning each row 
+        to the closest cluster based on feature space distance.
     """
 
     if excluded_ids_no_makro.empty or clustering.empty:
@@ -238,6 +340,28 @@ def assign_excluded_ids_to_clusters(excluded_ids_no_makro: pd.DataFrame, cluster
 #######################################
 
 def hierarchical_clustering(data: pd.DataFrame, n_clusters: int = None, exclude_cols: list = None) -> tuple[pd.DataFrame, AgglomerativeClustering]:
+    """
+    Performs hierarchical agglomerative clustering on the dataset.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset containing features for clustering.
+    n_clusters : int, optional
+        The number of clusters to find. If None, the clustering is performed using 
+        a distance threshold to create a full dendrogram (no preset number of clusters). 
+        Defaults to None.
+    exclude_cols : list, optional
+        List of columns to exclude from clustering (e.g., identifiers or non-numeric columns). 
+        Defaults to None.
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        A copy of the input DataFrame with an added 'cluster' column containing cluster labels.
+    model : sklearn.cluster.AgglomerativeClustering
+        The fitted AgglomerativeClustering model instance.
+    """
     data = data.copy()
 
     features = data.drop(columns=[col for col in exclude_cols if col in data.columns])
@@ -249,13 +373,28 @@ def hierarchical_clustering(data: pd.DataFrame, n_clusters: int = None, exclude_
 
     model.fit(features)
     data['cluster'] = model.labels_
+
     return data, model
 
 
 def plot_dendrogram(model, y_line: float, **kwargs):
     """
-    Plots a dendrogram for a fitted AgglomerativeClustering model with larger size, more y-axis labels, and a grid.
-    Ensures only one figure is plotted.
+    Plots a dendrogram for a fitted AgglomerativeClustering model with enhanced formatting.
+
+    Parameters
+    ----------
+    model : sklearn.cluster.AgglomerativeClustering
+        A fitted AgglomerativeClustering model containing hierarchical clustering info.
+    y_line : float
+        The y-axis value at which to draw a horizontal reference line (e.g., to indicate cluster cutoff).
+    **kwargs : dict
+        Additional keyword arguments to pass to `scipy.cluster.hierarchy.dendrogram`.
+
+    Returns
+    -------
+    None
+        Displays a dendrogram plot with increased figure size, more y-axis ticks, a grid, 
+        and a horizontal reference line at `y_line`.
     """
     counts = np.zeros(model.children_.shape[0])
     n_samples = len(model.labels_)
@@ -290,13 +429,25 @@ def plot_dendrogram(model, y_line: float, **kwargs):
 
 def kmeans_clustering(data_scaled: pd.DataFrame, n_clusters: int, exclude_cols: list = None) -> pd.DataFrame:
     """
-    Perform KMeans clustering, with optional exclusion of columns.
-        data_scaled (pd.DataFrame): Scaled data for clustering.
-        n_clusters (int): Number of clusters.
-        exclude_cols (list, optional): Columns to exclude from clustering.
+    Performs KMeans clustering on scaled data with optional exclusion of specified columns.
 
-    Returns:
-        pd.DataFrame: DataFrame with a new 'cluster' column and centroids DataFrame including all columns.
+    Parameters
+    ----------
+    data_scaled : pandas.DataFrame
+        The scaled dataset used for clustering.
+    n_clusters : int
+        The number of clusters to form.
+    exclude_cols : list, optional
+        List of column names to exclude from clustering (e.g., identifiers or non-feature columns). 
+        Defaults to None.
+
+    Returns
+    -------
+    result : pandas.DataFrame
+        A copy of the input DataFrame with an added 'cluster' column containing cluster labels.
+    centroids : pandas.DataFrame
+        A DataFrame of cluster centroids for all columns, including excluded columns 
+        (where centroid values are the mean of those columns within each cluster).
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -326,12 +477,22 @@ def kmeans_clustering(data_scaled: pd.DataFrame, n_clusters: int, exclude_cols: 
 
 def plot_elbow(data: pd.DataFrame, max_n_cluster: int = 10, exclude_cols: list = None) -> None:
     """
-    Plot the Elbow Method using Plotly, with option to exclude columns from clustering.
+    Plots the Elbow Method graph to help determine the optimal number of clusters for KMeans.
 
-    Args:
-        data (pd.DataFrame): Input data.
-        max_n_cluster (int): Maximum number of clusters to try.
-        exclude_cols (list, optional): Columns to exclude from clustering.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset to use for clustering.
+    max_n_cluster : int, optional
+        The maximum number of clusters to evaluate (from 1 to `max_n_cluster`). Defaults to 10.
+    exclude_cols : list, optional
+        List of columns to exclude from clustering (e.g., non-feature or identifier columns). 
+        Defaults to None.
+
+    Returns
+    -------
+    None
+        Displays an interactive Plotly line chart showing inertia values for each cluster count.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -365,7 +526,25 @@ def plot_elbow(data: pd.DataFrame, max_n_cluster: int = 10, exclude_cols: list =
     fig.show()
 
 def avg_silhouette_score(data: pd.DataFrame, n_cluster: int, exclude_cols: list = None) -> float:
+    """
+    Calculates the average silhouette score for KMeans clustering on the dataset.
 
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset to cluster.
+    n_cluster : int
+        The number of clusters to form.
+    exclude_cols : list, optional
+        List of columns to exclude from clustering (e.g., identifiers or non-feature columns). 
+        Defaults to None.
+
+    Returns
+    -------
+    silhouette_avg : float
+        The average silhouette score, measuring how well samples are clustered 
+        (higher values indicate better clustering).
+    """
     if exclude_cols is None:
         exclude_cols = []
 
@@ -378,13 +557,24 @@ def avg_silhouette_score(data: pd.DataFrame, n_cluster: int, exclude_cols: list 
 
 def plot_silhouette(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, title: str = None):
     """
-    Plot the silhouette scores for the clustering result using Plotly.
+    Creates a silhouette plot to visualize the quality of clustering.
 
-    Args:
-        data (pd.DataFrame): DataFrame containing features and cluster labels.
-        cluster_col (str): Name of the column with cluster labels.
-        exclude_cols (list, optional): Columns to exclude from features.
-        title (str, optional): Plot title.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        DataFrame containing features and cluster assignments.
+    cluster_col : str
+        Name of the column with cluster labels.
+    exclude_cols : list, optional
+        List of columns to exclude from features before computing silhouette scores. Defaults to None.
+    title : str, optional
+        Title of the silhouette plot. Defaults to a generic title if not provided.
+
+    Returns
+    -------
+    None
+        Displays an interactive Plotly silhouette plot with silhouette scores for each cluster,
+        including an average silhouette score reference line.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -462,39 +652,61 @@ def som(data_np: np.ndarray,
     random_seed: int = 42,
     number_of_iterations: int = 1000) -> MiniSom:
     """
-    Train a Self-Organizing Map (SOM) using the given data.
+    Trains a Self-Organizing Map (SOM) on the input data and assigns winning nodes to each data point.
 
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
-        x (int): The number of rows in the SOM grid.
-        y (int): The number of columns in the SOM grid.
-        input_len (int): The number of features in the input data.
-        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
-        learning_rate (float, optional): The initial learning rate. Default is 0.5.
-        random_seed (int, optional): The seed for random number generation. Default is None.
-        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
+    Parameters
+    ----------
+    data_np : numpy.ndarray
+        Numpy array of input features used to train the SOM.
+    data : pandas.DataFrame
+        Original DataFrame containing the data to which the winning node labels will be assigned.
+    x : int
+        Number of rows in the SOM grid.
+    y : int
+        Number of columns in the SOM grid.
+    input_len : int
+        Number of features in the input data.
+    sigma : float, optional
+        Spread of the neighborhood function (default is 0.5).
+    learning_rate : float, optional
+        Initial learning rate for training the SOM (default is 1).
+    neighborhood_function : str, optional
+        Neighborhood function used in the SOM, e.g., 'gaussian' (default is 'gaussian').
+    random_seed : int, optional
+        Seed for random number generation (default is 42).
+    number_of_iterations : int, optional
+        Number of training iterations (default is 1000).
 
-    Returns:
-        MiniSom: The trained SOM model.
+    Returns
+    -------
+    result : pandas.DataFrame
+        Copy of the input DataFrame with an added 'winner_node' column indicating the best matching unit (BMU) coordinates for each data point.
     """
     som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
     som.train_batch(data_np, number_of_iterations)
 
     data['winner_node'] = ([som.winner(data_np[i]) for i in range(len(data_np))])
+
     return data
 
 def som_mean_clusters(data, col):
     """
-    Calculate the mean of a specified column grouped by SOM winner nodes.
+    Calculates the mean of a specified column grouped by SOM winner nodes.
 
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        col (str): The column name for which the mean is calculated.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Input DataFrame containing the data with a 'winner_node' column.
+    col : str
+        Name of the column for which the mean value is calculated.
 
-    Returns:
-        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
+    Returns
+    -------
+    result : pandas.DataFrame
+        DataFrame with mean values of the specified column grouped by 'winner_node', sorted by the mean values and rounded to 2 decimals.
     """
     grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
+
     return grouped
 
 def som_lattice(data_np: np.ndarray,
@@ -506,12 +718,40 @@ def som_lattice(data_np: np.ndarray,
                                         neighborhood_function: str ='gaussian', 
                                         random_seed: int = 42,
                                         number_of_iterations: int = 1000):
+    """
+    Trains a Self-Organizing Map (SOM) and plots the distance map (lattice) to visualize cluster boundaries.
 
+    Parameters
+    ----------
+    data_np : numpy.ndarray
+        Numpy array of input data for training the SOM.
+    x : int
+        Number of rows in the SOM grid.
+    y : int
+        Number of columns in the SOM grid.
+    input_len : int
+        Number of features in the input data.
+    sigma : float, optional
+        Spread of the neighborhood function (default is 0.5).
+    learning_rate : float, optional
+        Initial learning rate (default is 1).
+    neighborhood_function : str, optional
+        Neighborhood function to use (default is 'gaussian').
+    random_seed : int, optional
+        Seed for random number generator (default is 42).
+    number_of_iterations : int, optional
+        Number of iterations to train the SOM (default is 1000).
+
+    Returns
+    -------
+    None
+        Displays a plot of the SOM distance map.
+    """
     som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
     som.train_batch(data_np, number_of_iterations)
     plt.pcolor(som.distance_map().T, cmap='bone_r')
     plt.colorbar()
-    
+
 
 #######################################
 ############### DBScan ################
@@ -519,16 +759,23 @@ def som_lattice(data_np: np.ndarray,
 
 def dbscan_clustering(data: pd.DataFrame, eps: float, min_samples: int, exclude_cols: list = None) -> pd.DataFrame:
     """
-    Perform DBSCAN clustering, with optional exclusion of columns.
+    Performs DBSCAN clustering on the dataset, optionally excluding specified columns.
 
-    Args:
-        data (pd.DataFrame): Input data.
-        eps (float): The maximum distance between two samples for them to be considered as in the same neighborhood.
-        min_samples (int): The number of samples in a neighborhood for a point to be considered as a core point.
-        exclude_cols (list, optional): Columns to exclude from clustering.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The input dataset for clustering.
+    eps : float
+        The maximum distance between two samples for them to be considered as neighbors.
+    min_samples : int
+        The minimum number of samples required in a neighborhood for a point to be considered a core point.
+    exclude_cols : list, optional
+        List of columns to exclude from clustering (default is None).
 
-    Returns:
-        pd.DataFrame: DataFrame with a new 'cluster' column.
+    Returns
+    -------
+    result : pandas.DataFrame
+        Copy of the input DataFrame with an added 'cluster' column containing DBSCAN cluster labels.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -541,13 +788,23 @@ def dbscan_clustering(data: pd.DataFrame, eps: float, min_samples: int, exclude_
 
 def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_values: list, exclude_cols: list = None) -> None:
     """
-    Plots the number of clusters found by DBSCAN as a function of eps, with axes switched.
+    Plots the number of clusters found by DBSCAN as a function of eps, with axes swapped.
 
-    Args:
-        data (pd.DataFrame): The input data for clustering.
-        min_samples (int): The min_samples parameter for DBSCAN.
-        eps_values (list): List of eps values to try.
-        exclude_cols (list, optional): Columns to exclude from clustering.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The input dataset for clustering.
+    min_samples : int
+        The min_samples parameter for DBSCAN, specifying the minimum number of points to form a dense region.
+    eps_values : list
+        List of eps (maximum neighborhood distance) values to evaluate.
+    exclude_cols : list, optional
+        Columns to exclude from clustering (default is None).
+
+    Returns
+    -------
+    None
+        Displays a Plotly figure showing how the number of clusters changes with varying eps.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -592,18 +849,27 @@ def spectral_clustering(
     random_state: int = 42
 ) -> pd.DataFrame:
     """
-    Perform Spectral Clustering on the data, with optional exclusion of columns.
+    Performs Spectral Clustering on the dataset with optional exclusion of specified columns.
 
-    Args:
-        data (pd.DataFrame): Input data for clustering.
-        n_clusters (int): Number of clusters.
-        exclude_cols (list, optional): Columns to exclude from clustering.
-        assign_labels (str): The strategy for assigning labels ('kmeans' or 'discretize').
-        affinity (str): How to construct the affinity matrix ('nearest_neighbors', 'rbf', etc.).
-        random_state (int): Random seed for reproducibility.
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        The dataset to cluster.
+    n_clusters : int
+        The number of clusters to form.
+    exclude_cols : list, optional
+        List of columns to exclude from clustering (e.g., identifiers or non-feature columns). Defaults to None.
+    assign_labels : str, optional
+        The strategy to assign labels after clustering. Options are 'kmeans' or 'discretize'. Defaults to 'kmeans'.
+    affinity : str, optional
+        How to construct the affinity matrix. Options include 'nearest_neighbors', 'rbf', etc. Defaults to 'nearest_neighbors'.
+    random_state : int, optional
+        Seed for random number generation for reproducibility. Defaults to 42.
 
-    Returns:
-        pd.DataFrame: DataFrame with a new 'cluster' column.
+    Returns
+    -------
+    result : pandas.DataFrame
+        Copy of the input DataFrame with an added 'cluster' column containing cluster labels.
     """
     if exclude_cols is None:
         exclude_cols = []
@@ -627,12 +893,22 @@ def spectral_clustering(
 ########################################
 
 def visualize_dimensionality_reduction(transformation, targets):
-    '''
-    Visualizes the results of dimensionality reduction. This function is taken from prof. Ivo's lecture notes.
-    Parameters:
-     - transformation: The result of dimensionality reduction, PCA, t-SNE, UMAP, etc.
-     - targets: The target labels for the data points.
-    '''
+    """
+    Visualizes 2D results of dimensionality reduction techniques.
+
+    Parameters
+    ----------
+    transformation : array-like, shape (n_samples, 2)
+        The 2D coordinates resulting from dimensionality reduction methods
+        such as PCA, t-SNE, UMAP, etc.
+    targets : array-like
+        Target labels or classes corresponding to each data point.
+
+    Returns
+    -------
+    None
+        Displays an interactive scatter plot colored by target class.
+    """
     df = pd.DataFrame({
         'Dim1': transformation[:, 0],
         'Dim2': transformation[:, 1],
