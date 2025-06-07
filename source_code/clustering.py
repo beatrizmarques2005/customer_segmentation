@@ -259,7 +259,7 @@ def reassign_clusters(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.Da
 
     return data_clusters, data_cluster_notscaled
 
-def find_cluster_exclude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
+'''def find_cluster_exclude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
     """
     Assigns clusters to excluded data points based on proximity to existing cluster centroids.
 
@@ -288,7 +288,7 @@ def find_cluster_exclude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, ex
     excluded_ids_no_makro_with_cluster = data_excluded.copy()
     excluded_ids_no_makro_with_cluster['cluster'] = closest_clusters
 
-    return excluded_ids_no_makro_with_cluster
+    return excluded_ids_no_makro_with_cluster'''
 
 def assign_excluded_ids_to_clusters(excluded_ids_no_makro: pd.DataFrame, clustering: pd.DataFrame) -> pd.DataFrame:
     """
@@ -636,7 +636,6 @@ def plot_silhouette(data: pd.DataFrame, cluster_col: str, exclude_cols: list = N
     fig = go.Figure(data=traces, layout=layout)
     fig.show()
 
-
 #######################################
 ################ SOM ##################
 #######################################
@@ -751,90 +750,6 @@ def som_lattice(data_np: np.ndarray,
     som.train_batch(data_np, number_of_iterations)
     plt.pcolor(som.distance_map().T, cmap='bone_r')
     plt.colorbar()
-
-
-#######################################
-############### DBScan ################
-#######################################
-
-def dbscan_clustering(data: pd.DataFrame, eps: float, min_samples: int, exclude_cols: list = None) -> pd.DataFrame:
-    """
-    Performs DBSCAN clustering on the dataset, optionally excluding specified columns.
-
-    Parameters
-    ----------
-    data : pandas.DataFrame
-        The input dataset for clustering.
-    eps : float
-        The maximum distance between two samples for them to be considered as neighbors.
-    min_samples : int
-        The minimum number of samples required in a neighborhood for a point to be considered a core point.
-    exclude_cols : list, optional
-        List of columns to exclude from clustering (default is None).
-
-    Returns
-    -------
-    result : pandas.DataFrame
-        Copy of the input DataFrame with an added 'cluster' column containing DBSCAN cluster labels.
-    """
-    if exclude_cols is None:
-        exclude_cols = []
-    features = data.drop(columns=exclude_cols) if exclude_cols else data
-
-    model = DBSCAN(eps=eps, min_samples=min_samples)
-    data['cluster'] = model.fit_predict(features)
-
-    return data
-
-def plot_dbscan_cluster_count_vs_eps(data: pd.DataFrame, min_samples: int, eps_values: list, exclude_cols: list = None) -> None:
-    """
-    Plots the number of clusters found by DBSCAN as a function of eps, with axes swapped.
-
-    Parameters
-    ----------
-    data : pandas.DataFrame
-        The input dataset for clustering.
-    min_samples : int
-        The min_samples parameter for DBSCAN, specifying the minimum number of points to form a dense region.
-    eps_values : list
-        List of eps (maximum neighborhood distance) values to evaluate.
-    exclude_cols : list, optional
-        Columns to exclude from clustering (default is None).
-
-    Returns
-    -------
-    None
-        Displays a Plotly figure showing how the number of clusters changes with varying eps.
-    """
-    if exclude_cols is None:
-        exclude_cols = []
-    features = data.drop(columns=exclude_cols) if exclude_cols else data
-
-    n_clusters_list = []
-    for eps in eps_values:
-        model = DBSCAN(eps=eps, min_samples=min_samples)
-        labels = model.fit_predict(features)
-        # Exclude noise label (-1) from cluster count
-        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        n_clusters_list.append(n_clusters)
-
-    fig = go.Figure(
-        data=go.Scatter(
-            x=n_clusters_list,
-            y=eps_values,
-            mode='lines+markers',
-            marker=dict(size=8),
-            hovertemplate='Clusters=%{x}<br>eps=%{y:.2f}<extra></extra>'
-        )
-    )
-    fig.update_layout(
-        title=f"DBSCAN: eps vs Number of Clusters (min_samples={min_samples})",
-        xaxis_title="Number of Clusters",
-        yaxis_title="eps",
-        template="plotly_white"
-    )
-    fig.show()
-
 
 #######################################
 ######## Spectral Clustering ##########

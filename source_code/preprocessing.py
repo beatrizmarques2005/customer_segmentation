@@ -534,8 +534,10 @@ def treat_outliers(data: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     """
     Identifies and removes outlier rows from the input DataFrame based on predefined upper thresholds for specific columns.
     For each column listed in the internal `thresholds` dictionary, any row with a value exceeding the corresponding threshold is considered an outlier and removed. Missing values (NaN) are not treated as outliers.
+    
     Parameters:
         data (pd.DataFrame): The input DataFrame containing the data to be filtered for outliers.
+    
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]:
             - The first DataFrame contains the rows with outliers removed.
