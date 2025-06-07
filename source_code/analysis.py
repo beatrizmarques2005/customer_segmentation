@@ -86,6 +86,9 @@ def plot_all_clusters_profile(variables: list[str], cluster_averages: pd.DataFra
         Displays an interactive Plotly scatter plot comparing cluster profiles 
         to the database average. No object is returned.
     """
+    import plotly.express as px
+    import plotly.graph_objects as go
+
     # Create database average DataFrame
     df_database = pd.DataFrame({
         'Variable': variables,
@@ -106,9 +109,9 @@ def plot_all_clusters_profile(variables: list[str], cluster_averages: pd.DataFra
     # Combine
     df_plot = pd.concat([df_clusters, df_database], ignore_index=True)
 
-    # Create scatter plot with clean filled circle dots
+    # Create scatter plot for clusters
     fig = px.scatter(
-        df_plot,
+        df_plot[df_plot['Cluster'] != 'Database Average'],
         x='Value',
         y='Variable',
         color='Cluster',
@@ -119,11 +122,20 @@ def plot_all_clusters_profile(variables: list[str], cluster_averages: pd.DataFra
         height=40 * len(variables) + 100,
     )
 
-    fig.update_traces(marker=dict(symbol='circle'))
+    # Add database average as black dots
+    fig.add_trace(go.Scatter(
+        x=df_database['Value'],
+        y=df_database['Variable'],
+        mode='markers',
+        marker=dict(color='black', size=12, symbol='circle'),
+        name='Database Average',
+        hovertemplate='<b>%{y}</b><br>Database Avg: %{x:.2f}<extra></extra>',
+        showlegend=True
+    ))
 
     fig.update_layout(
         yaxis=dict(autorange='reversed'),
-        plot_bgcolor='#f9f9f9',
+        plot_bgcolor="#fff7f7",
         legend_title='Cluster',
         xaxis_title='Mean / Normalized Value',
         margin=dict(l=60, r=40, t=60, b=40)
@@ -162,6 +174,8 @@ def transform_dataset(data:pd.DataFrame, data_clusters:pd.DataFrame, num_cluster
         The original list of goods per customer in the specified cluster, 
         parsed into Python lists.
     """
+
+    data = data.copy()
 
     data.set_index('customer_id', inplace=True)
     items = data.sort_values(by='customer_id')
@@ -325,7 +339,8 @@ def radar_chart_by_cluster(df: pd.DataFrame, cluster_col: str = 'cluster', title
 def plot_cluster_boxplots(df: pd.DataFrame, cluster_col: str, exclude: list[str] = None, title: str = 'Clustered Boxplots') -> None:
     """
     Generates interactive boxplots for numeric variables across clusters, allowing users 
-    to switch between variables using a dropdown menu.
+    to switch between variables using a dropdown menu. Adds a point for the mean of each 
+    distribution of each cluster.
 
     Parameters:
     ----------
@@ -363,6 +378,7 @@ def plot_cluster_boxplots(df: pd.DataFrame, cluster_col: str, exclude: list[str]
             cluster_data = df[df[cluster_col] == cluster]
             visible = (var_index == 0)
 
+            # Boxplot trace
             fig.add_trace(
                 go.Box(
                     y=cluster_data[var],
@@ -377,14 +393,34 @@ def plot_cluster_boxplots(df: pd.DataFrame, cluster_col: str, exclude: list[str]
                 )
             )
 
+        # Add mean points for each cluster for this variable
+        for cluster in cluster_labels:
+            cluster_data = df[df[cluster_col] == cluster]
+            mean_val = cluster_data[var].mean()
+            visible = (var_index == 0)
+            fig.add_trace(
+                go.Scatter(
+                    x=[str(cluster)],
+                    y=[mean_val],
+                    mode='markers',
+                    marker=dict(symbol='x', size=10, color='black'),
+                    name=f'Mean (Cluster {cluster})',
+                    legendgroup=f'Mean {cluster}',
+                    showlegend=(var_index == 0),  # Only show legend for first variable
+                    visible=visible,
+                    hovertemplate=f'{var}<br>Cluster: {cluster}<br>Mean: {mean_val:.2f}<extra>Mean</extra>'
+                )
+            )
+
     # Create dropdown buttons
     buttons = []
     n_clusters = len(cluster_labels)
+    n_traces_per_var = n_clusters * 2  # box + mean per cluster
 
     for i, var in enumerate(variables):
-        visibility = [False] * len(variables) * n_clusters
-        for j in range(n_clusters):
-            visibility[i * n_clusters + j] = True
+        visibility = [False] * len(variables) * n_traces_per_var
+        for j in range(n_traces_per_var):
+            visibility[i * n_traces_per_var + j] = True
 
         buttons.append(dict(
             label=var,

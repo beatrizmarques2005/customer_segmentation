@@ -290,17 +290,21 @@ def reassign_clusters(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.Da
 
     return excluded_ids_no_makro_with_cluster'''
 
-def assign_excluded_ids_to_clusters(excluded_ids_no_makro: pd.DataFrame, clustering: pd.DataFrame) -> pd.DataFrame:
+def assign_excluded_ids_to_clusters(
+    excluded_ids_no_makro_notscaled: pd.DataFrame,
+    clustering_notscaled: pd.DataFrame
+) -> pd.DataFrame:
     """
-    Assigns clusters to excluded data points based on the nearest cluster centroid.
+    Assigns clusters to excluded data points based on the nearest cluster centroid
+    using the not-scaled dataset.
 
     Parameters
     ----------
     excluded_ids_no_makro : pandas.DataFrame
         DataFrame containing the data points that were excluded from the original clustering 
         (e.g., without Makro), including all relevant feature columns.
-    clustering : pandas.DataFrame
-        DataFrame containing the original clustering results, including a 'cluster' column 
+    clustering_notscaled : pandas.DataFrame
+        DataFrame containing the original clustering results (not scaled), including a 'cluster' column 
         and all relevant feature columns for centroid calculation.
 
     Returns
@@ -310,29 +314,27 @@ def assign_excluded_ids_to_clusters(excluded_ids_no_makro: pd.DataFrame, cluster
         to the closest cluster based on feature space distance.
     """
 
-    if excluded_ids_no_makro.empty or clustering.empty:
+    if excluded_ids_no_makro_notscaled.empty or clustering_notscaled.empty:
         raise ValueError("Input DataFrames cannot be empty.")
 
-    if 'cluster' not in clustering.columns:
-        raise ValueError("'cluster' column is missing in clustering.")
+    if 'cluster' not in clustering_notscaled.columns:
+        raise ValueError("'cluster' column is missing in clustering_notscaled.")
 
     exclude_cols = ['customer_id', 'has_loyalty_card', 'longitude', 'latitude', 'gender']
 
-    feature_cols_for_distance = [col for col in clustering.columns if col not in exclude_cols + ['cluster']]
+    feature_cols_for_distance = [col for col in clustering_notscaled.columns if col not in exclude_cols + ['cluster']]
 
-    centroids = clustering.groupby('cluster')[feature_cols_for_distance].mean().values
+    centroids = clustering_notscaled.groupby('cluster')[feature_cols_for_distance].mean().values
 
-    # The typo was here: .valuesance.values should be .values
-    excluded_ids_features = excluded_ids_no_makro[feature_cols_for_distance].values
+    excluded_ids_features = excluded_ids_no_makro_notscaled[feature_cols_for_distance].values
 
-    # assign each row to the nearest centroid
     distances = cdist(excluded_ids_features, centroids)
     closest_clusters = distances.argmin(axis=1)
 
-    excluded_ids_no_makro_with_cluster = excluded_ids_no_makro.copy()
-    excluded_ids_no_makro_with_cluster['cluster'] = closest_clusters
+    excluded_ids_no_makro_notscaled_with_cluster = excluded_ids_no_makro_notscaled.copy()
+    excluded_ids_no_makro_notscaled_with_cluster['cluster'] = closest_clusters
 
-    return excluded_ids_no_makro_with_cluster
+    return excluded_ids_no_makro_notscaled_with_cluster
 
 
 #######################################
