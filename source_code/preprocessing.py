@@ -657,23 +657,6 @@ def impute_kids_teens_home(customer_info: pd.DataFrame) -> pd.DataFrame:
     
     return customer_info
 
-'''def impute_lifetime_spend_alcohol_drinks(customer_info: pd.DataFrame) -> pd.DataFrame:
-    """
-    Imputes missing values in the 'lifetime_spend_alcohol_drinks' column of the customer_info DataFrame.
-
-    This function replaces all NaN (missing) values in the 'lifetime_spend_alcohol_drinks' column with 0.
-
-    Parameters:
-    customer_info (pd.DataFrame): A pandas DataFrame containing customer information, including the 
-                                  'lifetime_spend_alcohol_drinks' column.
-
-    Returns:
-    None: The function modifies the input DataFrame in place.
-    """
-    customer_info['lifetime_spend_alcohol_drinks'].replace(np.nan, 0, inplace = True)
-
-    return customer_info'''
-
 def impute_education_level(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
     Impute the 'education_level' column based on the 'age' column.
@@ -706,8 +689,7 @@ def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
     Imputes missing values in the customer_info DataFrame using specific imputation functions.
     This function applies a series of imputation steps to handle missing values in the input DataFrame:
     1. Imputes missing values related to the number of kids and teens at home.
-    2. (Optional) Imputation for lifetime spend on alcohol drinks (currently commented out).
-    3. Imputes missing values for education level.
+    2. Imputes missing values for education level.
     Args:
         customer_info (pd.DataFrame): DataFrame containing customer information with possible missing values.
     Returns:
@@ -715,7 +697,6 @@ def impute_missing_values(customer_info: pd.DataFrame) -> pd.DataFrame:
     """
 
     customer_info = impute_kids_teens_home(customer_info)
-    # customer_info = impute_lifetime_spend_alcohol_drinks(customer_info)
     customer_info = impute_education_level(customer_info)
 
     return customer_info

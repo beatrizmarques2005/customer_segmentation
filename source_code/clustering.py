@@ -259,37 +259,6 @@ def reassign_clusters(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.Da
 
     return data_clusters, data_cluster_notscaled
 
-'''def find_cluster_exclude_data(data:pd.DataFrame, data_excluded: pd.DataFrame, exclude_cols:list):
-    """
-    Assigns clusters to excluded data points based on proximity to existing cluster centroids.
-
-    Parameters
-    ----------
-    data : pandas.DataFrame
-        The dataset used for the original clustering, including the final cluster labels 
-        in a column named 'cluster'.
-    data_excluded : pandas.DataFrame
-        The dataset containing points that were excluded from the original clustering, 
-        without cluster labels.
-    exclude_cols : list
-        List of columns to exclude from the distance calculation (e.g., IDs, non-numeric columns).
-
-    Returns
-    -------
-    excluded_ids_no_makro_with_cluster : pandas.DataFrame
-        A copy of `data_excluded` with an added 'cluster' column, assigning each row to 
-        the nearest cluster based on feature space distance.
-    """
-    feature_cols_for_distance = [col for col in data.columns if col not in exclude_cols + ['cluster']]
-    centroids= data.groupby('cluster')[feature_cols_for_distance].mean().values
-    excluded_features = data_excluded[feature_cols_for_distance].values
-    distances = cdist(excluded_features, centroids)
-    closest_clusters = distances.argmin(axis=1)
-    excluded_ids_no_makro_with_cluster = data_excluded.copy()
-    excluded_ids_no_makro_with_cluster['cluster'] = closest_clusters
-
-    return excluded_ids_no_makro_with_cluster'''
-
 def assign_excluded_ids_to_clusters(
     excluded_ids_no_makro_notscaled: pd.DataFrame,
     clustering_notscaled: pd.DataFrame
@@ -983,80 +952,5 @@ def plot_most_important_variable(trained_som, features):
     plt.xlim([0, 15])
     plt.ylim([0, 15])
     plt.show()
-
-def remove_outliers(customer_info: pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes outliers from the customer information DataFrame based on predefined conditions.
-
-    Parameters:
-    -----------
-    customer_info : pd.DataFrame
-        The input DataFrame containing customer information, including various columns.
-
-    Returns:
-    --------
-    pd.DataFrame
-        A filtered DataFrame containing only rows that satisfy the outlier conditions.
-    """
-    outlier_conditions = (
-        (customer_info['kids_home'] <= 8) &
-        (customer_info['teens_home'] <= 4) &
-        (customer_info['number_complaints'] <= 4) &
-        (customer_info['distinct_stores_visited'] <= 8) &
-        (customer_info['lifetime_spend_groceries'] <= 100000) &
-        (customer_info['lifetime_spend_electronics'] <= 20000) &
-        (customer_info['lifetime_spend_vegetables'] <= 2600) &
-        (customer_info['lifetime_spend_nonalcohol_drinks'] <= 1400) &
-        (customer_info['lifetime_spend_alcohol_drinks'] <= 2800) &
-        (customer_info['lifetime_spend_meat'] <= 2600) &
-        (customer_info['lifetime_spend_fish'] <= 2800) &
-        (customer_info['lifetime_spend_hygiene'] <= 2400) &
-        (customer_info['lifetime_spend_videogames'] <= 1700) &
-        (customer_info['lifetime_spend_petfood'] <= 850) &
-        (customer_info['lifetime_total_distinct_products'] <= 600) &
-        (customer_info['percentage_of_products_bought_promotion'] >= -0.5) &
-        (customer_info['percentage_of_products_bought_promotion'] <= 1.5)
-    )
-    return customer_info[outlier_conditions]
-
-# Elbow method
-
-def elbow_method(X, k_range=range(1, 11), plot=True, random_state=42):
-    """
-    Performs the Elbow Method to help choose the optimal number of clusters for K-Means.
-    
-    Parameters:
-    - X (np.ndarray or pd.DataFrame): Input data.
-    - k_range (iterable): Range of K values to try (default: 1 to 10).
-    - scale_data (bool): Whether to scale the data using StandardScaler (recommended).
-    - plot (bool): Whether to display the elbow plot.
-    - random_state (int): Random seed for reproducibility.
-    
-    Returns:
-    - distortions (list): Sum of squared distances for each K.
-    """
-    
-    distortions = []
-    
-    for k in k_range:
-        kmeans = KMeans(n_clusters=k, 
-                        n_init=10, 
-                        max_iter=300, 
-                        random_state=random_state,
-                        algorithm='elkan')  # faster for dense data
-        kmeans.fit(X)
-        distortions.append(kmeans.inertia_)  # Sum of squared distances to closest cluster center
-    
-    if plot:
-        plt.figure(figsize=(8, 5))
-        plt.plot(list(k_range), distortions, marker='o')
-        plt.xlabel('Number of clusters (K)')
-        plt.ylabel('Inertia (Sum of Squared Distances)')
-        plt.title('Elbow Method For Optimal K')
-        plt.xticks(list(k_range))
-        plt.grid(True)
-        plt.show()
-    
-    return distortions
 
 '''
