@@ -1,19 +1,14 @@
 from sklearn.cluster import AgglomerativeClustering, KMeans, SpectralClustering
 from minisom import MiniSom
 import pandas as pd
-#from sklearn.cluster import estimate_bandwidth
 from scipy.cluster.hierarchy import dendrogram
 from scipy.spatial.distance import cdist
 import numpy as np
 import matplotlib.pyplot as plt
-#import matplotlib.cm as cm
 from sklearn.metrics import silhouette_samples, silhouette_score
-#from sklearn.base import ClusterMixin
 import umap
 import plotly.graph_objects as go
-#from sklearn.decomposition import PCA
 import plotly.express as px
-from scipy.spatial.distance import cdist
 
 def summarise_clusters(data: pd.DataFrame, cluster_col: str, exclude_cols: list = None, scaled: bool = False) -> pd.DataFrame:
     """
@@ -222,14 +217,6 @@ def map_visualization(
         title=title
     )
     fig.show()
-
-'''def reassign_cluster(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.DataFrame, num_cluster: int, num_new_cluster: int):
-    cluster_name = data_clusters[data_clusters['cluster'] == num_cluster].reset_index(drop=True)
-    cluster_name_notscaled = data_cluster_notscaled[data_cluster_notscaled['cluster'] == num_cluster].reset_index(drop=True)
-    cluster_name['cluster'] = num_new_cluster
-    cluster_name_notscaled['cluster'] = num_new_cluster
-    return cluster_name, cluster_name_notscaled
-'''
 
 def reassign_clusters(data_clusters: pd.DataFrame, data_cluster_notscaled: pd.DataFrame, dict_num_cluster: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -816,141 +803,3 @@ def visualize_dimensionality_reduction(transformation, targets):
 
     fig.update_layout(legend_title='Classes')
     fig.show()
-
-'''
-# SOM
-def check_multidimensional_outliers_som(data: pd.DataFrame, 
-                                        x: int, 
-                                        y: int, 
-                                        input_len: int, 
-                                        sigma: float = 1.0,
-                                        learning_rate: float = 0.5, 
-                                        random_seed: int = None,
-                                        number_of_iterations: int = 1000) -> MiniSom:
-    """
-    Train a Self-Organizing Map (SOM) using the given data.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data to train the SOM.
-        x (int): The number of rows in the SOM grid.
-        y (int): The number of columns in the SOM grid.
-        input_len (int): The number of features in the input data.
-        sigma (float, optional): The spread of the neighborhood function. Default is 1.0.
-        learning_rate (float, optional): The initial learning rate. Default is 0.5.
-        random_seed (int, optional): The seed for random number generation. Default is None.
-        number_of_iterations (int, optional): The number of iterations for training. Default is 1000.
-
-    Returns:
-        MiniSom: The trained SOM model.
-    """
-    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
-    som.random_weights_init(data)
-    som.train_random(data, num_iteration=number_of_iterations)
-
-def som_mean_clusters(data, col):
-    """
-    Calculate the mean of a specified column grouped by SOM winner nodes.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        col (str): The column name for which the mean is calculated.
-
-    Returns:
-        pd.DataFrame: A DataFrame with the mean values of the specified column grouped by winner nodes.
-    """
-    grouped = data.groupby(['winner_node'], as_index=False)[col].mean().sort_values(by=[col]).round(2)
-    return grouped
-
-def visualize_data_points_grid(data, scaled_data, som_model, color_variable, color_dict):
-    """
-    Visualize data points on a SOM grid with a distance map in the background.
-
-    Args:
-        data (pd.DataFrame): The input DataFrame containing the data.
-        scaled_data (np.ndarray): The scaled data used for SOM training.
-        som_model (minisom.MiniSom): The trained SOM model.
-        color_variable (str): The column name used for coloring data points.
-        color_dict (dict): A dictionary mapping unique values in the color_variable to colors.
-
-    Returns:
-        None: Displays a scatter plot with the SOM grid.
-    """
-    target = data[color_variable]
-    fig, ax = plt.subplots()
-
-    # Get weights for SOM winners
-    w_x, w_y = zip(*[som_model.winner(d) for d in scaled_data])
-    w_x = np.array(w_x)
-    w_y = np.array(w_y)
-
-    # Plot distance map in the background
-    plt.pcolor(som_model.distance_map().T, cmap='bone_r', alpha=.2)
-    plt.colorbar()
-
-    # Plot data points with random perturbation to avoid overlap
-    for c in np.unique(target):
-        idx_target = target == c
-        plt.scatter(
-            w_x[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            w_y[idx_target] + .5 + (np.random.rand(np.sum(idx_target)) - .5) * .8,
-            s=50, c=color_dict[c], label=c
-        )
-
-    ax.legend(bbox_to_anchor=(1.2, 1.05))
-    plt.grid()
-    plt.show()
-
-def plot_feature_influence(trained_som, data):
-    """
-    Plot the influence of each feature on the SOM nodes.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        data (pd.DataFrame): The input DataFrame containing the data.
-
-    Returns:
-        None: Displays a grid of plots showing feature influence.
-    """
-    feature_names = data.columns
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(10, 10))
-    for i, f in enumerate(feature_names):
-        plt.subplot(5, 5, i + 1)
-        plt.title(f)
-        plt.pcolor(W[:, :, i].T, cmap='coolwarm')
-        plt.xticks(np.arange(15 + 1))
-        plt.yticks(np.arange(15 + 1))
-    plt.tight_layout()
-    plt.show()
-
-def plot_most_important_variable(trained_som, features):
-    """
-    Plot the most important variable for each SOM unit.
-
-    Args:
-        trained_som (minisom.MiniSom): The trained SOM model.
-        features (list): List of feature names used in SOM training.
-
-    Returns:
-        None: Displays a plot showing the most important variable for each SOM unit.
-    """
-    W = trained_som.get_weights()
-
-    plt.figure(figsize=(8, 8))
-    for i in np.arange(W.shape[0]):
-        for j in np.arange(W.shape[1]):
-            feature = np.argmax(W[i, j, :])
-            plt.plot([i + .5], [j + .5], 'o', color='C' + str(feature),
-                     marker='s', markersize=24)
-
-    legend_elements = [
-        Patch(facecolor='C' + str(i), edgecolor='w', label=f) for i, f in enumerate(features)
-    ]
-
-    plt.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, .95))
-    plt.xlim([0, 15])
-    plt.ylim([0, 15])
-    plt.show()
-
-'''

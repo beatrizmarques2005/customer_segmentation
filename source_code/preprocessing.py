@@ -3,17 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import KNNImputer
-from sklearn.preprocessing import LabelEncoder
-import geopandas as gpd
-from shapely.geometry import Point
-from sklearn.cluster import DBSCAN, KMeans
-from minisom import MiniSom
-import seaborn as sns
-from scipy.cluster.hierarchy import linkage, fcluster
-import shap
-from sklearn.ensemble import RandomForestClassifier
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
+from sklearn.cluster import DBSCAN
 
 #######################################
 ######### GENERAL EXPLORATION #########
