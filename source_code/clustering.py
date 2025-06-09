@@ -594,49 +594,6 @@ def plot_silhouette(data: pd.DataFrame, cluster_col: str, exclude_cols: list = N
     fig = go.Figure(data=traces, layout=layout)
     fig.show()
 
-
-                                        x: int, 
-                                        y: int, 
-                                        input_len: int, 
-                                        sigma: float = 0.5,
-                                        learning_rate: float = 1,
-                                        neighborhood_function: str ='gaussian', 
-                                        random_seed: int = 42,
-                                        number_of_iterations: int = 1000):
-    """
-    Trains a Self-Organizing Map (SOM) and plots the distance map (lattice) to visualize cluster boundaries.
-
-    Parameters
-    ----------
-    data_np : numpy.ndarray
-        Numpy array of input data for training the SOM.
-    x : int
-        Number of rows in the SOM grid.
-    y : int
-        Number of columns in the SOM grid.
-    input_len : int
-        Number of features in the input data.
-    sigma : float, optional
-        Spread of the neighborhood function (default is 0.5).
-    learning_rate : float, optional
-        Initial learning rate (default is 1).
-    neighborhood_function : str, optional
-        Neighborhood function to use (default is 'gaussian').
-    random_seed : int, optional
-        Seed for random number generator (default is 42).
-    number_of_iterations : int, optional
-        Number of iterations to train the SOM (default is 1000).
-
-    Returns
-    -------
-    None
-        Displays a plot of the SOM distance map.
-    """
-    som = MiniSom(x=x, y=y, input_len=input_len, sigma=sigma, learning_rate=learning_rate, random_seed=random_seed)
-    som.train_batch(data_np, number_of_iterations)
-    plt.pcolor(som.distance_map().T, cmap='bone_r')
-    plt.colorbar()
-
 #######################################
 ######## Spectral Clustering ##########
 #######################################
