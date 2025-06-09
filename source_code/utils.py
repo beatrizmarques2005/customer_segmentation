@@ -31,37 +31,6 @@ def load_dataset(dataset_path: str) -> pd.DataFrame:
     return data
 
 
-def save_dataset(data: pd.DataFrame, format: str, path: str) -> None:
-    """
-    Saves a pandas DataFrame to a file in the specified format.
-
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        The DataFrame to be saved.
-    format : str
-        The format in which to save the file. 
-    path : str
-        The file path where the dataset will be saved.
-    Raises:
-    -------
-    ValueError
-        If the specified format is not 'csv' or 'xlsx'.
-    Returns:
-    --------
-    None
-    """
-
-    if format == 'csv':
-        data.to_csv(path, index = False)
-
-    elif format == 'xlsx':
-        data.to_excel(path, index = False)
-
-    else:
-        raise ValueError("The format must be in CSV or EXCEL.")
-    
-
 def amount_deleted_rows(original_df: pd.DataFrame, final_df: pd.DataFrame) -> None:
     """
     Calculates and prints the percentage of rows deleted from the original DataFrame 

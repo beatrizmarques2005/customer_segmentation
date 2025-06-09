@@ -564,6 +564,28 @@ def treat_outliers(data: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
 ## Multi Dimensional Outliers --> DBSCAN
 
 def check_multidimensional_outliers_dbscan(customer_info: pd.DataFrame, min_samples: int, eps: float) -> pd.DataFrame:
+    """
+    Identifies multidimensional outliers in a customer dataset using the DBSCAN clustering algorithm.
+
+    Parameters:
+    ----------
+    customer_info : pd.DataFrame
+        A DataFrame containing customer data. If present, the 'customer_id' column will be excluded 
+        from clustering input as it's typically a non-numeric identifier.
+    min_samples : int
+        The minimum number of samples in a neighborhood for a point to be considered a core point 
+        in the DBSCAN algorithm.
+    eps : float
+        The maximum distance between two samples for them to be considered as in the same neighborhood.
+
+    Returns:
+    -------
+    pd.DataFrame
+        A DataFrame identical to the input with two additional columns:
+        - 'cluster_dbscan': the DBSCAN-assigned cluster label for each observation.
+                            A value of -1 indicates an outlier.
+        - 'is_outlier_dbscan': a boolean column indicating whether each observation is considered an outlier.
+    """
     # Exclude 'customer_id' from DBSCAN input
     features = customer_info.drop(columns=['customer_id']) if 'customer_id' in customer_info.columns else customer_info.copy()
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
