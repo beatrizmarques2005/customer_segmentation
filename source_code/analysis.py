@@ -75,8 +75,6 @@ def plot_all_clusters_profile(variables: list[str], cluster_averages: pd.DataFra
         Displays an interactive Plotly scatter plot comparing cluster profiles 
         to the database average. No object is returned.
     """
-    import plotly.express as px
-    import plotly.graph_objects as go
 
     # Create database average DataFrame
     df_database = pd.DataFrame({
