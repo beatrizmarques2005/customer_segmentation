@@ -1,6 +1,9 @@
-# Machine Learning II Class - Data Science Degree - NOVA IMS
+# Customer Segmentation
+### Machine Learning II Class · Data Science Degree · NOVA IMS
 
-## Customer Segmentation: A Key to Unlocking Business Growth and Success
+## 📋 Overview
+
+**Customer Segmentation: A Key to Unlocking Business Growth and Success**
 
 In today's competitive market, understanding your customers and tailoring your marketing strategies to meet their specific needs and preferences is critical for business success. Customer segmentation, the process of dividing a large customer base into smaller groups based on shared characteristics, can help businesses gain valuable insights into their customers and develop targeted marketing strategies that maximize customer engagement and loyalty.
 
@@ -8,7 +11,7 @@ Unsupervised machine learning plays an important role in customer segmentation b
 
 For a data scientist, mastering unsupervised learning algorithms is essential because these techniques enable them to extract valuable insights from data without relying on predefined labels. Unlike supervised learning, which requires annotated datasets, unsupervised learning uncovers patterns, structures, and relationships within raw data, making it a powerful tool for exploratory analysis.
 
-## The Data
+## 🗂️ The Data
 
 For this assignment, you will be provided with two datasets containing information on customer demographics, spending habits, purchasing behavior, and historical transactions. Your task is to perform customer segmentation and identify distinct groups of customers based on their shared characteristics. The two datasets are named:
 
@@ -56,7 +59,7 @@ Contains information about customers' different baskets purchased at the shop. E
 
 Additionally, you can access `product_mapping.xlsx`, an Excel file that contains a mapping between the product name and its category.
 
-## The Project
+## 🎯 The Project
 
 In this project, you will be asked to:
 
@@ -64,7 +67,7 @@ In this project, you will be asked to:
 2. **Analyze customer behavior**: Gain insights into motivations, preferences, and needs by analyzing purchasing patterns, loyalty card usage, and complaint history.
 3. **Develop targeted marketing strategies**: Use the `customer_basket.csv` dataset to develop personalized promotions, targeted ads, and tailored product offerings.
 
-## Deliverables
+## 📦 Deliverables
 
 - A GitHub repository with code and an explanation of the solution.
 - Clean, well-structured, and modular code (extra points for well-organized `.py` files instead of notebook-heavy code).
@@ -76,7 +79,7 @@ In this project, you will be asked to:
 - The last commit before **June 9th at 23:59:59** will be considered.
 - Late submissions will incur penalties unless an exception is requested via `ibernardo@novaims.unl.pt`.
 
-## Report Structure
+## 🧾 Report Structure
 
 ### 1) Executive Summary
 - Overview of the problem addressed
@@ -100,7 +103,7 @@ In this project, you will be asked to:
 - Summary of findings
 - Key takeaways and recommendations
 
-## Evaluation Criteria
+## 📊 Evaluation Criteria
 
 Your project will be evaluated based on:
 
@@ -113,3 +116,51 @@ Your project will be evaluated based on:
 - **Extra: Code quality** (+2 Points)
 
 _Note: No code should be included in the report; all code should be in the Jupyter Notebook(s) or Python files._
+
+## 📁 Repository Structure
+
+```tree
+customer_segmentation/
+│
+├── clustering_outputs/
+│   ├── final_clustering.csv
+│   ├── final_clustering_notscaled.csv
+│   ├── hierarchical8.csv
+│   ├── hierarchical8_notscaled.csv
+│   ├── kmeans10.csv
+│   ├── kmeans10_notscaled.csv
+│   ├── spectral10.csv
+│   └── spectral10_notscaled.csv
+│
+├── data/
+│   ├── customer_basket.csv
+│   ├── customer_basket_preprocessed.csv
+│   ├── customer_info.csv
+│   ├── customer_info_preprocessed.csv
+│   ├── customer_info_preprocessed_notscaled.csv
+│   ├── excluded_ids_preprocessed.csv
+│   ├── excluded_ids_preprocessed_notscaled.csv
+│   └── items_summary.csv
+│
+├── notebook_testing/
+│   ├── analysis.ipynb
+│   ├── clustering.ipynb
+│   └── preprocessing.ipynb
+│
+├── source_code/
+│   ├── analysis.py
+│   ├── clustering.py
+│   ├── preprocessing.py
+│   └── utils.py
+│
+├── .gitignore
+├── final_csv_group9.csv
+├── report_group9.pdf
+└── README.md
+```
+
+## 👥 Team
+
+- Beatriz Marques – 20231605
+- Duarte Fernandes – 20231619
+- Darija Avramoska – 20230004
