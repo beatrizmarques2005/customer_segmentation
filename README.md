@@ -142,12 +142,12 @@ customer_segmentation/
 │   ├── excluded_ids_preprocessed_notscaled.csv
 │   └── items_summary.csv
 │
-├── notebook_testing/
+├── notebooks/
 │   ├── analysis.ipynb
 │   ├── clustering.ipynb
 │   └── preprocessing.ipynb
 │
-├── source_code/
+├── src/
 │   ├── analysis.py
 │   ├── clustering.py
 │   ├── preprocessing.py
